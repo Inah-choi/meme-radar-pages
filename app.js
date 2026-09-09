@@ -1,7 +1,7 @@
-import {createRadarReview} from './radar-review.mjs';
-import {createBangerRadar} from './banger-radar.mjs';
-import {API_ORIGIN} from './deployment-config.mjs';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs';
+import {createRadarReview} from './radar-review.mjs?v=7e999401797d8d0d9dc6';
+import {createBangerRadar} from './banger-radar.mjs?v=7e999401797d8d0d9dc6';
+import {API_ORIGIN} from './deployment-config.mjs?v=7e999401797d8d0d9dc6';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=7e999401797d8d0d9dc6';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
