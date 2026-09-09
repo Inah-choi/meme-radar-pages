@@ -1,6 +1,8 @@
 // A connection is chosen explicitly in the login form or deployment file. Never
 // read connection targets or credentials from the page URL, query or fragment.
 export const API_ORIGIN_STORAGE = 'observatory-api-origin';
+export const API_DEPLOYMENT_ORIGIN_STORAGE = 'observatory-api-deployment-origin';
+export const API_SELECTION_MODE_STORAGE = 'observatory-api-selection-mode';
 const LEGACY_KEY = 'observatory-key';
 const fail = () => { throw new Error('백엔드 URL은 경로·인증정보 없이 HTTPS 서버 주소를 입력하세요. 로컬 HTTP는 localhost만 사용할 수 있습니다.'); };
 const get = (storage, key) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
@@ -24,11 +26,24 @@ export function apiSessionKey(apiOrigin, pageOrigin) {
 
 export function readApiSession(storage, pageOrigin, deploymentOrigin = '') {
   const saved = get(storage, API_ORIGIN_STORAGE);
-  let input = saved ?? deploymentOrigin;
-  let apiOrigin, invalid = false;
-  try { apiOrigin = normalizeApiOrigin(input, pageOrigin); }
-  catch { input = ''; apiOrigin = normalizeApiOrigin('', pageOrigin); invalid = true; }
-  let key = invalid ? '' : get(storage, apiSessionKey(apiOrigin, pageOrigin)) || '';
+  const mode = get(storage, API_SELECTION_MODE_STORAGE), previous = get(storage, API_DEPLOYMENT_ORIGIN_STORAGE);
+  let apiOrigin, currentDefault, oldDefault = null, invalid = false, changedDefault = false, followsDefault = false;
+  try {
+    currentDefault = normalizeApiOrigin(deploymentOrigin, pageOrigin);
+    const savedOrigin = saved === null ? null : normalizeApiOrigin(saved, pageOrigin);
+    if (previous !== null) { try { oldDefault = normalizeApiOrigin(previous, pageOrigin); } catch {} }
+    // A recorded override stays an override even if a later deployment happens
+    // to use that same origin. Unmarked legacy choices are inferred only when
+    // they match the known previous default (or the current default on first use).
+    followsDefault = saved === null || mode === 'default' || mode !== 'override' && savedOrigin === (oldDefault ?? currentDefault);
+    changedDefault = followsDefault && oldDefault !== null && oldDefault !== currentDefault;
+    apiOrigin = followsDefault ? currentDefault : savedOrigin;
+  } catch { apiOrigin = normalizeApiOrigin('', pageOrigin); invalid = true; }
+  if (changedDefault) {
+    remove(storage, apiSessionKey(oldDefault, pageOrigin));
+    remove(storage, apiSessionKey(apiOrigin, pageOrigin));
+  }
+  let key = invalid || changedDefault ? '' : get(storage, apiSessionKey(apiOrigin, pageOrigin)) || '';
   // Existing local sessions migrate only to the same origin, never to a newly
   // configured external backend. Remove the old unscoped slot in either case.
   const legacy = get(storage, LEGACY_KEY);
@@ -36,13 +51,21 @@ export function readApiSession(storage, pageOrigin, deploymentOrigin = '') {
     key = legacy; set(storage, apiSessionKey(apiOrigin, pageOrigin), key);
   }
   remove(storage, LEGACY_KEY);
+  if (!invalid) {
+    set(storage, API_ORIGIN_STORAGE, apiOrigin === pageOrigin ? '' : apiOrigin);
+    set(storage, API_DEPLOYMENT_ORIGIN_STORAGE, currentDefault);
+    set(storage, API_SELECTION_MODE_STORAGE, followsDefault ? 'default' : 'override');
+  }
   return {apiOrigin, apiInput: apiOrigin === pageOrigin ? '' : apiOrigin, key,
     error: invalid ? '저장된 백엔드 URL이 올바르지 않습니다. 서버 주소를 다시 입력하세요.' : ''};
 }
 
-export function saveApiSession(storage, {apiOrigin, key}, pageOrigin) {
+export function saveApiSession(storage, {apiOrigin, key}, pageOrigin, deploymentOrigin = '') {
   const normalized = normalizeApiOrigin(apiOrigin, pageOrigin);
+  const currentDefault = normalizeApiOrigin(deploymentOrigin, pageOrigin);
   set(storage, API_ORIGIN_STORAGE, normalized === pageOrigin ? '' : normalized);
+  set(storage, API_DEPLOYMENT_ORIGIN_STORAGE, currentDefault);
+  set(storage, API_SELECTION_MODE_STORAGE, normalized === currentDefault ? 'default' : 'override');
   set(storage, apiSessionKey(normalized, pageOrigin), key);
   remove(storage, LEGACY_KEY);
 }

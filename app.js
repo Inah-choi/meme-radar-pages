@@ -3587,7 +3587,7 @@ $("#login-form").addEventListener("submit", async (event) => {
       state.key = key;
       updateApiConnectionLinks(origin);
       const overview = await api("/api/overview");
-      saveApiSession(sessionStorage, {apiOrigin: origin, key}, location.origin);
+      saveApiSession(sessionStorage, {apiOrigin: origin, key}, location.origin, API_ORIGIN);
       state.overview = overview;
       state.lastSync = new Date().toISOString();
       $("#login-screen").hidden = true;
