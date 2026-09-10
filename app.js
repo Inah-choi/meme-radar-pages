@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=437f03cef6d98653164d';
-import {createBangerRadar} from './banger-radar.mjs?v=437f03cef6d98653164d';
-import {createMyTokens} from './my-tokens.mjs?v=437f03cef6d98653164d';
-import {API_ORIGIN} from './deployment-config.mjs?v=437f03cef6d98653164d';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=437f03cef6d98653164d';
+import {createRadarReview} from './radar-review.mjs?v=b073c021290d1f359800';
+import {createBangerRadar} from './banger-radar.mjs?v=b073c021290d1f359800';
+import {createMyTokens} from './my-tokens.mjs?v=b073c021290d1f359800';
+import {API_ORIGIN} from './deployment-config.mjs?v=b073c021290d1f359800';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=b073c021290d1f359800';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -836,7 +836,137 @@ function renderOverview() {
   updateAlert();
 }
 /* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 핫 레인 페이지에서만 GET /api/hot-lane을 읽는다. */
-const HOT_LANE_STATES = { primed: '대기', armed: '무장', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
+const HOT_LANE_STATES = { primed: '관찰 중', armed: '발행 검토', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
+const HOT_QUALITY_LABELS = { candidate: '뱅어 후보', watch: '관찰', crowded: '중복 과밀', insufficient: '근거 부족' };
+const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문' };
+const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음' };
+const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
+let hotLaneFetchSequence = 0;
+function hotLaneBucket(signal) {
+  const quality = signal.quality;
+  if (quality?.tier === 'crowded' || quality?.duplicates?.level === 'high') return 'crowded';
+  if (quality?.tier === 'candidate' && quality.eligible === true) return 'candidate';
+  if (!quality || quality.tier === 'insufficient') return 'insufficient';
+  return 'watch';
+}
+function hotLaneInProgress(signal) { return ['armed', 'launching', 'launched'].includes(signal.state); }
+function hotLanePublicUrl(value, xPost = false) {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    if (xPost && (url.port || !['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(url.hostname) || !/^\/(?:[a-zA-Z0-9_]+|i\/web)\/status\/\d+\/?$/.test(url.pathname))) return null;
+    return url.href;
+  } catch { return null; }
+}
+function hotLaneLink(label, url, xPost = false) {
+  const safe = hotLanePublicUrl(url, xPost);
+  if (!safe) return node('span', 'muted', `${label} · 링크 없음`);
+  const link = node('a', 'text-link', label);
+  link.href = safe; link.target = '_blank'; link.rel = 'noopener noreferrer';
+  return link;
+}
+function hotLaneCount(value) { return finite(value) ? `${Math.max(0, Math.trunc(Number(value)))}개` : '미확인'; }
+function hotLaneEvidence(signal, bucket) {
+  const quality = signal.quality || {}, duplicates = quality.duplicates || {}, key = String(signal.key || signal.label || '');
+  const detail = node('details', 'hot-evidence');
+  detail.open = hotLaneOpenEvidence.has(key);
+  hotLaneEvidenceViews.set(key, detail);
+  detail.addEventListener('toggle', () => {
+    if (hotLaneEvidenceViews.get(key) !== detail) return;
+    if (detail.open) hotLaneOpenEvidence.add(key); else hotLaneOpenEvidence.delete(key);
+  });
+  const evidence = list(signal.evidence), competitors = list(signal.competitors);
+  const summary = node('summary', '', `산출 근거 · X 원문 ${evidence.length}건${competitors.length ? ` · 비교 토큰 ${competitors.length}개` : ''}`);
+  const body = node('div', 'hot-evidence-body');
+  append(detail, summary, body);
+  const assessment = node('div', 'hot-evidence-assessment');
+  for (const [title, values, style] of [['확인된 강점', quality.strengths, 'strength'], ['검토할 점', quality.cautions, 'caution']]) {
+    if (!list(values).length) continue;
+    const group = append(node('section', `hot-assessment-${style}`), node('h4', '', title)), items = node('ul');
+    for (const value of list(values).slice(0, 8)) items.append(node('li', '', String(value).slice(0, 600)));
+    append(group, items); assessment.append(group);
+  }
+  if (!assessment.children.length) assessment.append(node('p', 'muted', '이 후보의 상세 평가를 아직 받지 못했습니다.'));
+  body.append(assessment);
+  if (list(quality.reasons).length) body.append(node('p', 'hot-gate-reasons', list(quality.reasons).map(code => HOT_HOLD_REASONS[code] || String(code)).join(' · ')));
+  const currentClasses = list(quality.currentClasses), classes = [...new Set([...currentClasses, ...list(signal.classes)])];
+  const signals = append(node('section', 'hot-evidence-signals'), node('h4', '', '어떤 신호가 겹쳤나요?'));
+  for (const kind of classes) {
+    const description = !currentClasses.includes(kind) ? (Array.isArray(quality.currentClasses) ? '이전에 포착한 신호입니다. 현재 유효 신호에 포함하지 않습니다.' : '이전에 포착한 신호이며 현재 유효 여부는 미확인입니다.') : kind === 'A' ? `비슷한 소재의 토큰 ${display(signal.echoTokens, 0)}개가 ${display(signal.echoVenues, 0)}곳에서 발행됐습니다. 매수 수요를 뜻하지 않으며, 중복 경쟁일 수 있습니다.`
+      : kind === 'B' ? '서로 다른 작성자의 최근 X 원문이 증가했습니다.' : kind === 'C' ? '설정된 주요 계정의 최근 X 원문에서 포착했습니다.' : String(kind);
+    signals.append(append(node('p'), node('strong', '', HOT_SIGNAL_LABELS[kind] || String(kind)), node('span', '', ` — ${description}`)));
+  }
+  if (!currentClasses.length) signals.append(node('p', 'muted', '현재 유효한 교차 신호가 확인되지 않았습니다.'));
+  signals.append(node('p', 'muted', 'A는 유사 토큰의 발행 신호이며 매수 수요를 뜻하지 않습니다.')); 
+  body.append(signals);
+  const posts = append(node('section', 'hot-source-section'), node('h4', '', 'X 원문'));
+  if (!evidence.length) posts.append(node('p', 'hot-no-evidence', '수집된 X 원문 없음 · 토큰 이름이 반복된 것만으로는 뱅어 후보로 판단하지 않습니다.'));
+  for (const post of evidence.slice(0, 8)) {
+    const author = String(post.author || '작성자 미확인').slice(0, 100), item = node('article', 'hot-source-item');
+    const meta = append(node('div', 'hot-source-meta'), node('strong', '', author), node('span', 'muted', date(post.publishedAt)));
+    meta.append(node('span', `hot-source-freshness${post.fresh === true ? ' fresh' : ''}`, post.contextOnly === true ? '맥락 확인용 · 점수 미반영' : post.fresh === true ? '최근 1시간 유효 원문' : post.fresh === false ? '이전 원문 · 맥락 확인용' : '유효 시간 미확인'));
+    append(item, meta, node('p', 'hot-source-text', String(post.text || '수집된 본문 없음').slice(0, 1000)), hotLaneLink('X 원문 보기 ↗', post.url, true));
+    posts.append(item);
+  }
+  if (evidence.length > 8) posts.append(node('p', 'muted', `수집된 원문 ${evidence.length}건 중 최근 8건 표시`));
+  body.append(posts);
+  const competition = append(node('section', 'hot-competition'), node('h4', '', '최근 7일 기존 토큰'));
+  competition.append(node('p', 'muted', '이름·티커·관련 토큰 수는 서로 겹칠 수 있어 합산하지 않습니다. 관련 수량에는 같은 티커를 쓰는 다른 소재도 포함될 수 있습니다. 수집된 발행 등록부 기준이며 전체 시장 수량은 아닙니다.'));
+  if (duplicates.coverage === 'unavailable' || duplicates.level === 'unknown') competition.append(node('p', 'hot-no-evidence', '기존 토큰 중복 데이터 미확인'));
+  if (duplicates.identityAmbiguous) competition.append(node('p', 'hot-gate-reasons', '소재 키와 이름·티커의 대응이 모호해 관련 토큰을 함께 확인해야 합니다.'));
+  if (!competitors.length) competition.append(node('p', 'muted', '표시할 비교 토큰이 없습니다.'));
+  for (const token of competitors.slice(0, 8)) {
+    const item = node('div', 'hot-competitor'), title = `${String(token.name || '이름 없음').slice(0, 120)}${token.symbol ? ` · $${String(token.symbol).slice(0, 40)}` : ''}`;
+    item.append(hotLanePublicUrl(token.url) ? hotLaneLink(title, token.url) : node('strong', '', title));
+    item.append(node('span', 'muted', `${display(token.launchpad, '발행처 미확인')} · ${date(token.launchedAt)}`));
+    if (token.tokenAddress) { const address = node('code', '', String(token.tokenAddress).slice(0, 90)); item.append(address); }
+    competition.append(item);
+  }
+  body.append(competition);
+  if (signal.heldCode) body.append(node('p', 'hot-diagnostic muted', `처리 상태: ${HOT_LANE_STATES[signal.state] || display(signal.state)} · ${String(signal.heldCode).slice(0, 100)}`));
+  return detail;
+}
+function hotLaneCard(signal) {
+  const quality = signal.quality || {}, bucket = hotLaneBucket(signal), duplicates = quality.duplicates || {};
+  const row = hotLaneEvidence(signal, bucket), summary = row.children[0], body = row.children[1];
+  row.className = `hot-evidence hot-quality-row hot-quality-${bucket}`;
+  summary.className = 'hot-row-summary'; summary.replaceChildren();
+  const identity = node('h3', 'hot-row-name', String(signal.label || signal.key || '—').slice(0, 100));
+  identity.title = identity.textContent;
+  const grade = node('span', 'hot-row-grade');
+  grade.append(node('span', `hot-quality-badge ${bucket}`, HOT_QUALITY_LABELS[bucket]));
+  if (finite(quality.score)) grade.append(node('span', 'hot-quality-score', `${Math.max(0, Math.min(100, Math.round(Number(quality.score))))}점`));
+  const related = node('span', 'hot-row-count', hotLaneCount(duplicates.topicCount7d));
+  related.title = '최근 7일 수집된 관련 이름·티커의 토큰 수. 전체 시장 수량은 아닙니다.';
+  related.setAttribute('aria-label', `최근 7일 관련 토큰 ${related.textContent}`);
+  const sources = node('span', 'hot-row-count', finite(quality.sourceCount) ? `${quality.sourceCount}건` : '미확인');
+  sources.title = '최근 1시간 유효 X 원문 수';
+  sources.setAttribute('aria-label', `최근 1시간 유효 X 원문 ${sources.textContent}`);
+  const stateLabel = HOT_LANE_STATES[signal.state] || display(signal.state);
+  const status = node('span', 'hot-row-state', stateLabel);
+  const toggle = node('span', 'hot-row-toggle', '자세히');
+  append(summary, identity, grade, related, sources, status, toggle);
+  const context = node('section', 'hot-row-context');
+  const detailTitle = `산출 근거 · X 원문 ${list(signal.evidence).length}건${list(signal.competitors).length ? ` · 비교 토큰 ${list(signal.competitors).length}개` : ''}`;
+  context.append(node('h4', '', detailTitle));
+  if (signal.label && signal.key && signal.label !== signal.key) context.append(node('p', 'muted', `소재 키: ${String(signal.key).slice(0, 100)}`));
+  context.append(node('p', 'muted', `상태: ${stateLabel} · ${date(signal.armedAt || signal.updatedAt || signal.primedAt)}`));
+  const reason = HOT_HOLD_REASONS[signal.heldCode] || (signal.state === 'primed' ? `교차 확인 대기 · ${Array.isArray(quality.currentClasses) ? '현재 유효 신호' : '이전에 포착한 신호'} ${Array.isArray(quality.currentClasses) ? list(quality.currentClasses).length : list(signal.classes).length}종류` : signal.heldCode ? '발행 조건 확인 필요' : '');
+  if (reason) context.append(node('p', 'lane-signal-reason', reason));
+  const lead = (bucket === 'candidate' ? list(quality.strengths)[0] : list(quality.cautions)[0]) || (bucket === 'insufficient' ? '원문 근거와 중복 정도를 더 확인해야 합니다.' : '원문 근거와 경쟁 토큰을 확인한 뒤 검토하세요.');
+  context.append(node('p', 'hot-quality-lead', lead));
+  const metrics = node('div', 'hot-quality-metrics');
+  for (const [label, value] of [['같은 이름 · 7일', duplicates.nameCount7d], ['같은 티커 · 7일', duplicates.tickerCount7d], ['관련 이름·티커 · 7일', duplicates.topicCount7d]]) metrics.append(append(node('div'), node('span', 'muted', label), node('strong', '', hotLaneCount(value))));
+  context.append(metrics);
+  if (duplicates.nameBasis || duplicates.tickerBasis) context.append(node('p', 'hot-duplicate-basis', `집계 기준 · 이름: ${display(duplicates.nameBasis, '미확인')} · 티커: ${finite(duplicates.tickerCount7d) ? display(duplicates.tickerBasis, '미확인') : '아직 확인되지 않음'}`));
+  context.append(node('p', 'hot-source-counts', `최근 1시간 유효 원문 ${finite(quality.sourceCount) ? `${quality.sourceCount}건` : '미확인'} · 작성자 ${finite(quality.authorCount) ? `${quality.authorCount}명` : '미확인'}${quality.latestSourceAt ? ` · 최근 원문 ${ago(quality.latestSourceAt)}` : ''}`));
+  const classes = node('div', 'hot-signal-chips');
+  for (const kind of list(quality.currentClasses)) classes.append(node('span', '', HOT_SIGNAL_LABELS[kind] || String(kind)));
+  if (!list(quality.currentClasses).length) classes.append(node('span', '', Array.isArray(quality.currentClasses) ? '현재 유효 신호 없음' : '현재 신호 미확인'));
+  context.append(classes);
+  body.replaceChildren(context, ...body.children);
+  return row;
+}
 function hotLaneAdmin() {
   // /api/overview는 호출자의 관리자 권한을 유동성 요청 허용 플래그로만 노출한다.
   return state.overview?.dex?.canRequestLiquidity === true;
@@ -847,8 +977,15 @@ function hotLanePaused(lane) {
 }
 async function fetchHotLane() {
   if (state.page !== 'hot-lane' || !state.key) return;
-  try { state.hotLane = await api('/api/hot-lane'); state.hotLaneError = ''; }
-  catch (error) { state.hotLaneError = error.message; }
+  const sequence = ++hotLaneFetchSequence, params = [];
+  const filter = state.hotLaneFilter || 'all', query = String(state.hotLaneQuery || '').trim().slice(0, 80);
+  if (filter !== 'all') params.push(`qualityTier=${encodeURIComponent(filter)}`);
+  if (query) params.push(`q=${encodeURIComponent(query)}`);
+  try {
+    const lane = await api(`/api/hot-lane${params.length ? `?${params.join('&')}` : ''}`);
+    if (sequence !== hotLaneFetchSequence) return;
+    state.hotLane = lane; state.hotLaneError = '';
+  } catch (error) { if (sequence !== hotLaneFetchSequence) return; state.hotLaneError = error.message; }
   renderHotLane();
 }
 function renderHotLane() {
@@ -879,27 +1016,40 @@ function renderHotLane() {
   if (hour.max != null && Number(hour.used) >= Number(hour.max)) blockers.push('시간당 발행 한도에 도달했습니다.');
   if (day.max != null && Number(day.used) >= Number(day.max)) blockers.push('오늘 발행 한도에 도달했습니다.');
   readiness.className = `lane-readiness${blockers.length ? ' warning' : ''}`;
-  readiness.textContent = blockers.length ? `현재 실제 발행 불가 · ${blockers.join(' ')}` : '자동 발행 감시 중 · 두 종류 이상 신호가 겹치면 이미지·잔액·정책을 확인합니다.';
+  readiness.textContent = blockers.length ? `현재 실제 발행 불가 · ${blockers.join(' ')}` : '자동 발행 감시 중 · 원문 근거와 중복 조건을 통과한 후보의 이미지·잔액·정책을 확인합니다.';
 
   const error = $('#hot-lane-error');
   error.hidden = !state.hotLaneError;
   error.textContent = state.hotLaneError ? `핫 레인 상태 갱신 실패: ${state.hotLaneError} 마지막으로 받은 상태를 표시합니다.` : '';
-  const rows = clear('#hot-lane-rows'), signals = list(lane.signals).slice(0, 50);
-  for (const signal of signals) {
-    const stateLabel = HOT_LANE_STATES[signal.state] || display(signal.state);
-    const keyCell = append(node('td'), node('strong', '', String(signal.label || signal.key || '—').slice(0, 80)));
-    if (signal.label && signal.key && signal.label !== signal.key) keyCell.append(node('div', 'muted', String(signal.key).slice(0, 80)));
-    const stateCell = append(node('td'), node('span', `pill${signal.state === 'held' ? ' warning' : signal.state === 'launched' ? ' success' : ''}`, signal.state === 'held' && signal.heldCode ? `${stateLabel} · ${String(signal.heldCode).slice(0, 40)}` : stateLabel));
-    const reasons = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달' };
-    const reason = reasons[signal.heldCode] || (signal.state === 'primed' ? `교차 신호 대기 · ${list(signal.classes).length}/2종류 확보` : '');
-    if (reason) stateCell.append(node('div', 'lane-signal-reason', reason));
-    rows.append(append(node('tr'), keyCell, stateCell,
-      node('td', '', list(signal.classes).map(String).join('/') || '—'),
-      node('td', '', `${display(signal.echoTokens, 0)}${finite(signal.echoVenues) ? ` (${signal.echoVenues}곳)` : ''}`),
-      node('td', '', display(signal.burstAuthors, 0)),
-      node('td', '', date(signal.armedAt || signal.updatedAt || signal.primedAt))));
+  for (const [key, detail] of hotLaneEvidenceViews) { if (detail.open) hotLaneOpenEvidence.add(key); else hotLaneOpenEvidence.delete(key); }
+  hotLaneEvidenceViews.clear();
+  while (hotLaneOpenEvidence.size > 256) hotLaneOpenEvidence.delete(hotLaneOpenEvidence.values().next().value);
+  const all = list(lane.signals);
+  const search = $('#hot-lane-search'), queryInput = $('#hot-lane-query');
+  if (!search.hotLaneBound) {
+    search.hotLaneBound = true; queryInput.value = state.hotLaneQuery || '';
+    search.addEventListener('submit', async event => { event.preventDefault(); state.hotLaneQuery = String(queryInput.value || '').trim().slice(0, 80); await fetchHotLane(); });
+    $('#hot-lane-search-clear').addEventListener('click', async () => { queryInput.value = ''; state.hotLaneQuery = ''; await fetchHotLane(); });
   }
+  const weights = { candidate: 0, watch: 1, insufficient: 2, crowded: 3 };
+  const ranked = [...all].sort((left, right) => Number(hotLaneInProgress(right)) - Number(hotLaneInProgress(left)) || weights[hotLaneBucket(left)] - weights[hotLaneBucket(right)] || Number(right.quality?.score || 0) - Number(left.quality?.score || 0));
+  const filters = clear('#hot-lane-filters'), filter = state.hotLaneFilter || 'all';
+  for (const [value, label] of [['all', '전체 · 추천순'], ['candidate', '뱅어 후보'], ['watch', '관찰·근거 부족'], ['crowded', '중복 과밀']]) {
+    const totals = lane.totalByTier, observedCount = value === 'all' ? lane.totalSignals : value === 'watch' && totals ? Number(totals.watch || 0) + Number(totals.insufficient || 0) : totals?.[value];
+    const count = finite(observedCount) ? observedCount : value === 'all' ? all.length : all.filter(signal => value === 'watch' ? ['watch', 'insufficient'].includes(hotLaneBucket(signal)) : hotLaneBucket(signal) === value).length;
+    const button = node('button', `button small subtle${filter === value ? ' selected' : ''}`, `${label} ${count}`);
+    button.type = 'button'; button.setAttribute('aria-pressed', filter === value ? 'true' : 'false');
+    button.addEventListener('click', async () => { state.hotLaneFilter = value; await fetchHotLane(); });
+    filters.append(button);
+  }
+  const matching = ranked.filter(signal => filter === 'all' || hotLaneInProgress(signal) || (filter === 'watch' ? ['watch', 'insufficient'].includes(hotLaneBucket(signal)) : hotLaneBucket(signal) === filter));
+  const signals = matching.slice(0, 50), rows = clear('#hot-lane-rows');
+  for (const signal of signals) rows.append(hotLaneCard(signal));
+  const candidateCount = finite(lane.totalByTier?.candidate) ? Number(lane.totalByTier.candidate) : all.filter(signal => hotLaneBucket(signal) === 'candidate').length;
+  const total = finite(lane.totalSignals) ? Number(lane.totalSignals) : all.length, matched = finite(lane.matchingSignals) ? Number(lane.matchingSignals) : matching.length;
+  $('#hot-lane-selection').textContent = `${candidateCount ? `전체 뱅어 후보 ${candidateCount}건` : '현재 뱅어 후보 조건을 통과한 소재가 없습니다.'} · 전체 ${total}건 · 검색·분류 ${matched}건 · ${signals.length}건 표시${matched > 50 ? ' (최대 50건)' : ''}${filter !== 'all' ? ' · 발행 검토·진행·완료 상태는 검색 범위에서 분류와 관계없이 표시합니다.' : ' · 발행 진행 상태를 먼저, 나머지는 후보 점수와 중복 정도순으로 표시합니다.'}`;
   $('#hot-lane-empty').hidden = signals.length > 0;
+  $('#hot-lane-empty').textContent = total ? '검색·분류 조건에 해당하는 후보가 없습니다.' : '최근 24시간 동안 핫 레인 신호가 없습니다.';
   const admin = hotLaneAdmin(), pause = $('#hot-lane-pause'), resume = $('#hot-lane-resume');
   pause.disabled = !admin || paused;
   resume.disabled = !admin || !paused;

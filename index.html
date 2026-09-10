@@ -13,11 +13,11 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23c3f664'/%3E%3Cpath d='M9 28V12h4l7 10 7-10h4v16h-5v-8l-6 8-6-8v8z' fill='%23101820'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="./style.css?v=437f03cef6d98653164d" />
-    <link rel="stylesheet" href="./banger-radar.css?v=437f03cef6d98653164d" />
-    <link rel="stylesheet" href="./next-bangers.css?v=437f03cef6d98653164d" />
-    <link rel="stylesheet" href="./my-tokens.css?v=437f03cef6d98653164d" />
-    <script type="module" src="./app.js?v=437f03cef6d98653164d"></script>
+    <link rel="stylesheet" href="./style.css?v=b073c021290d1f359800" />
+    <link rel="stylesheet" href="./banger-radar.css?v=b073c021290d1f359800" />
+    <link rel="stylesheet" href="./next-bangers.css?v=b073c021290d1f359800" />
+    <link rel="stylesheet" href="./my-tokens.css?v=b073c021290d1f359800" />
+    <script type="module" src="./app.js?v=b073c021290d1f359800"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">본문 바로가기</a>
@@ -390,7 +390,7 @@
           </section>
           <section id="page-hot-lane" class="page" hidden>
             <div class="page-heading">
-              <div><div class="eyebrow">CROSS-CHECKED SIGNALS</div><h1>핫 레인</h1><p class="muted">교차 신호를 감시하고, 발행이 멈춘 이유를 확인하세요.</p></div>
+              <div><div class="eyebrow">EARLY IDEAS · SOURCE EVIDENCE</div><h1>핫 레인</h1><p class="muted">원문 근거가 있고, 같은 이름·티커가 덜 붐비는 소재부터 검토하세요.</p></div>
               <a class="button subtle" href="#policy">자동화 정책 ↗</a>
             </div>
             <p id="hot-lane-unavailable" class="lane-unavailable" role="status">핫 레인 상태를 불러오는 중입니다.</p>
@@ -406,21 +406,16 @@
                 </div>
               </div>
               <div id="hot-lane-readiness" class="lane-readiness" role="status"></div>
-              <p class="lane-legend">같은 소재에서 두 종류 이상 겹쳐야 발행 검토 · A 온체인 에코 · B 작성자 급증 · C 주요 계정 원문</p>
-              <div class="table-wrap">
-                <table class="hot-lane-table">
-                  <thead>
-                    <tr>
-                      <th>소재 키</th>
-                      <th>상태 / 대기 이유</th>
-                      <th>신호 종류</th>
-                      <th>에코 토큰</th>
-                      <th>작성자</th>
-                      <th>시각</th>
-                    </tr>
-                  </thead>
-                  <tbody id="hot-lane-rows"></tbody>
-                </table>
+              <p class="lane-legend">후보 점수는 수집된 원문·확산·중복 정도를 평가합니다. 실제 거래량은 확인되지 않았습니다.</p>
+              <form id="hot-lane-search" class="hot-quality-search">
+                <label for="hot-lane-query">소재 / 티커 검색</label>
+                <div><input id="hot-lane-query" type="search" maxlength="80" placeholder="예: NVDACAT, hoodstockmeme" autocomplete="off" /><button class="button small subtle" type="submit">검색</button><button id="hot-lane-search-clear" class="button small subtle" type="button">초기화</button></div>
+              </form>
+              <div id="hot-lane-filters" class="hot-quality-filters" aria-label="후보 분류"></div>
+              <p id="hot-lane-selection" class="hot-quality-selection" role="status"></p>
+              <div class="hot-quality-table-wrap">
+                <div class="hot-quality-columns" aria-hidden="true"><span>소재</span><span>분류 / 점수</span><span>관련 토큰 · 7일</span><span>X 원문 · 1시간</span><span>발행 상태</span><span>상세</span></div>
+                <div id="hot-lane-rows" class="hot-quality-list"></div>
               </div>
               <div id="hot-lane-empty" class="empty-state" hidden>최근 24시간 동안 핫 레인 신호가 없습니다.</div>
               <p id="hot-lane-error" class="hot-lane-error" role="status" hidden></p>
