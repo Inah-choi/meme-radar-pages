@@ -3429,3 +3429,11 @@ summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 5px; bor
   .flash-form .form-grid { padding-inline: 16px; }
   .flash-actions { padding-inline: 16px; }
 }
+
+/* The exact prepared artwork and identity used by the flash launch. */
+.flash-preview-hero { display: flex; gap: 22px; align-items: center; margin: 20px 0; }
+.flash-preview-image { width: 160px; height: 160px; object-fit: cover; border-radius: 16px; flex: 0 0 auto; background: #132024; }
+.flash-preview-identity { min-width: 0; }
+.flash-preview-identity .flash-preview-name { margin: 0 0 6px; font-size: 26px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.flash-preview-identity .flash-preview-symbol { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
+@media (max-width: 600px) { .flash-preview-hero { align-items: flex-start; gap: 14px; } .flash-preview-image { width: 104px; height: 104px; } .flash-preview-identity .flash-preview-name { font-size: 21px; } }

@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=9f4201ed4c13d53d2f59';
-import {createBangerRadar} from './banger-radar.mjs?v=9f4201ed4c13d53d2f59';
-import {createMyTokens} from './my-tokens.mjs?v=9f4201ed4c13d53d2f59';
-import {API_ORIGIN} from './deployment-config.mjs?v=9f4201ed4c13d53d2f59';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=9f4201ed4c13d53d2f59';
+import {createRadarReview} from './radar-review.mjs?v=0191eb4b5bd74a6b7410';
+import {createBangerRadar} from './banger-radar.mjs?v=0191eb4b5bd74a6b7410';
+import {createMyTokens} from './my-tokens.mjs?v=0191eb4b5bd74a6b7410';
+import {API_ORIGIN} from './deployment-config.mjs?v=0191eb4b5bd74a6b7410';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=0191eb4b5bd74a6b7410';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -967,17 +967,25 @@ function flashBody() {
 function flashSignature() { try { return JSON.stringify(flashBody()); } catch { return null; } }
 function flashLaunchReady(lane, operator, paused) {
   const preview = state.flashPreview;
-  return operator && !paused && lane.enabled === true && Boolean(preview) && list(preview.holds).length === 0 && state.flashPreviewSignature === flashSignature();
+  return operator && !paused && !lane.paused && !lane.emergencyStop && ['AUTO', 'PAPER'].includes(lane.mode) && lane.enabled === true && Boolean(preview?.previewId) && Date.parse(preview.expiresAt) > Date.now() && preview.mode === lane.mode && list(preview.holds).length === 0 && state.flashPreviewSignature === flashSignature();
+}
+function flashReasonText(code) {
+  const availability = { FLASH_NOT_WARM: '발행 연결을 준비하지 못했습니다. 잠시 뒤 다시 미리보기 하세요.', FLASH_LAUNCH_SERVICE_UNAVAILABLE: '서버의 발행 연결이 설정되지 않았습니다.', FLASH_LANE_DISABLED: '플래시 발행이 비활성 상태입니다.', FLASH_LANE_MODE_WATCH: '관찰 모드에서는 발행할 수 없습니다.', FLASH_LANE_EMERGENCY_STOP: '긴급 정지 중입니다.', FLASH_LANE_POLICY_PAUSED: '자동화가 일시 중지되어 있습니다.', FLASH_LANE_PAUSED: '플래시 발행이 일시 중지되어 있습니다.', FLASH_HOUR_CAP: '이번 시간의 발행 한도에 도달했습니다.', FLASH_DAY_CAP: '오늘의 발행 한도에 도달했습니다.', FLASH_KEY_COOLDOWN: '같은 소재를 최근 발행했습니다. 대기 시간이 지난 뒤 다시 시도하세요.', FLASH_DUPLICATE_LAUNCH: '이미 발행한 소재입니다.' };
+  if (availability[code]) return availability[code];
+  return ({ FLASH_NO_KEY: '원문에서 이름을 만들 수 없습니다. 주제가 드러나는 문장이나 이름을 입력하세요.', FLASH_IMAGE_UNAVAILABLE: '이미지를 준비하지 못했습니다. 이미지 주소를 입력하거나 다시 미리보기 하세요.', FLASH_ARTWORK_UNAVAILABLE: '자동 이미지 준비에 실패했습니다. 다시 미리보기 하세요.', FLASH_NOT_FUNDED: '발행 지갑의 자금이 부족합니다.', FLASH_PREVIEW_EXPIRED: '미리보기 유효 시간이 지났습니다. 다시 준비하세요.', FLASH_PREVIEW_CHANGED: '입력 또는 발행 모드가 바뀌었습니다. 다시 미리보기 하세요.' })[code] || String(code);
 }
 function flashLaunchNote(lane, operator, paused) {
   if (!operator) return '운영자 권한이 필요합니다. 읽기 전용으로 표시합니다.';
-  if (paused) return '레인이 일시 중지되어 발행할 수 없습니다.';
+  if (paused || lane.paused || lane.emergencyStop) return '발행이 일시 중지되어 있습니다.';
+  if (!['AUTO', 'PAPER'].includes(lane.mode)) return '현재 모드에서는 발행할 수 없습니다. 미리보기는 가능합니다.';
   if (lane.enabled !== true) return '레인이 비활성이라 발행할 수 없습니다 (정책 flashLane.enabled). 미리보기는 가능합니다.';
   const preview = state.flashPreview;
-  if (!preview) return '미리보기가 통과해야 발행 버튼이 열립니다.';
+  if (!preview) return '미리보기에서 이름과 이미지를 자동 준비하면 발행 버튼이 열립니다.';
   if (state.flashPreviewSignature !== flashSignature()) return '입력이 바뀌었습니다. 미리보기를 다시 실행하세요.';
-  if (list(preview.holds).length) return `보류 사유가 남아 있습니다: ${list(preview.holds).map(String).join(', ')}`;
-  return lane.mode === 'AUTO' ? 'AUTO 모드 · 발행 즉시 실제 메인넷 트랜잭션이 전송됩니다.' : `${display(lane.mode, 'PAPER')} 모드 · 실제 전송 없이 기록만 남깁니다.`;
+  if (list(preview.holds).length) return list(preview.holds).map(flashReasonText).join(' ');
+  if (!preview.previewId || Date.parse(preview.expiresAt) <= Date.now()) return '미리보기 유효 시간이 지났습니다. 다시 준비하세요.';
+  if (preview.mode !== lane.mode) return '발행 모드가 바뀌었습니다. 미리보기를 다시 실행하세요.';
+  return lane.mode === 'AUTO' ? '준비 완료 · 발행을 누르면 이 이름과 이미지로 실제 메인넷에 바로 전송합니다.' : 'PAPER 모드 · 이 이름과 이미지로 모의 발행합니다. 실제 전송은 없습니다.';
 }
 function flashPrewarmText(lane) {
   const pre = lane.prewarm, error = lane.prewarmError ? ` · 예열 오류: ${String(lane.prewarmError).slice(0, 160)}` : '';
@@ -1046,11 +1054,12 @@ function renderFlashGate(lane) {
   for (const selector of FLASH_FIELDS) $(selector).disabled = !operator;
   $('#flash-preview').disabled = !operator;
   $('#flash-launch').disabled = !flashLaunchReady(lane, operator, paused);
+  $('#flash-launch').textContent = lane.mode === 'PAPER' ? '⚡ 모의 발행' : '⚡ 지금 발행';
   $('#flash-form-note').textContent = flashLaunchNote(lane, operator, paused);
 }
 function flashCodeList(codes) {
   const items = node('ul');
-  for (const code of list(codes)) items.append(node('li', '', String(code).slice(0, 200)));
+  for (const code of list(codes)) items.append(node('li', '', flashReasonText(code).slice(0, 200)));
   return items;
 }
 function renderFlashPreview() {
@@ -1059,16 +1068,24 @@ function renderFlashPreview() {
   if (!preview) return;
   const holds = list(preview.holds).map(String);
   block.className = `flash-result${holds.length ? ' denied' : ''}`;
-  block.append(node('h4', '', holds.length ? `미리보기 · 보류 ${holds.length}건 · 발행 불가` : '미리보기 통과 · 발행 가능'));
+  block.append(node('h4', '', holds.length ? `미리보기 · 확인할 항목 ${holds.length}건` : '미리보기 · 준비 완료'));
   const naming = preview.naming || {};
-  block.append(node('p', '', naming.ok === false ? `이름: 실패 (${display(naming.code)}) ${list(naming.reasons).map(String).join(' · ')}`
-    : `이름: ${display(naming.name)} · 티커 $${display(naming.symbol)} · 출처 ${display(naming.source)}${list(naming.alternateSymbols).length ? ` · 대안 ${list(naming.alternateSymbols).map(String).join(', ')}` : ''}`));
+  const artwork = preview.image || {}, hero = node('div', 'flash-preview-hero');
+  if (typeof artwork.url === 'string' && /^https:\/\/[^\s]+$/.test(artwork.url)) {
+    const img = node('img', 'flash-preview-image');
+    img.src = artwork.url; img.alt = `${display(naming.name, '토큰')} 미리보기`; img.referrerPolicy = 'no-referrer';
+    hero.append(img);
+  }
+  const identity = node('div', 'flash-preview-identity');
+  identity.append(node('p', 'flash-preview-name', naming.ok === false ? '이름 준비 필요' : display(naming.name)));
+  if (naming.symbol) identity.append(node('p', 'flash-preview-symbol', `$${naming.symbol}`));
+  identity.append(node('p', 'muted', artwork.error ? flashReasonText(artwork.error) : ({ generated: '자동 생성 이미지', source: '원문 이미지', source_post: '원문 이미지', operator: '직접 지정한 이미지', fallback: '기본 이미지' })[artwork.source] || '준비된 이미지'));
+  if (preview.expiresAt) identity.append(node('p', 'muted', `이 미리보기는 ${date(preview.expiresAt)}까지 유효합니다.`));
+  hero.append(identity); block.append(hero);
   if (naming.description) block.append(node('p', 'muted', String(naming.description).slice(0, 300)));
   const pair = preview.pair || {};
   block.append(node('p', '', pair.error ? `페어: ${pair.error} (요청 ${display(pair.requested)})`
     : `페어: ${display(pair.symbol, 'ETH')} · ${FLASH_PAIR_REASONS[pair.reason] || display(pair.reason)}${pair.matched ? ` · 매칭 ${String(pair.matched).slice(0, 40)}` : ''}${list(pair.avoided).length ? ` · 회피 ${list(pair.avoided).map(String).join(', ')}` : ''}`));
-  const image = preview.image || {};
-  block.append(node('p', '', image.error ? `이미지: ${image.error}` : `이미지: ${display(image.url)} (${display(image.source)})`));
   const buy = preview.buy || {};
   block.append(node('p', '', buy.error ? `개발자 매수: ${buy.error}${buy.devBuyWei ? ` (${weiToEth(buy.devBuyWei)} ETH)` : ''}`
     : `개발자 매수: ${flashDevBuyText(buy.devBuyWei, buy.native === false ? display(pair.symbol) : 'ETH')} · ${FLASH_BUY_SOURCES[buy.source] || display(buy.source)}`));
@@ -1076,7 +1093,7 @@ function renderFlashPreview() {
   block.append(node('p', '', funding.ok === false ? `자금: 부족 ${weiToEth(funding.shortfallWei)} ETH (필요 ${weiToEth(funding.needWei)} ETH)` : `자금: ${funding.ok === true ? '충분' : '확인 불가'}${funding.needWei ? ` (필요 ${weiToEth(funding.needWei)} ETH)` : ''}`));
   const collisions = preview.collisions || {};
   block.append(node('p', 'muted', `최근 7일 발행 등록부 충돌: 티커 ${collisions.symbolTaken ? '있음 (대체 티커로 회전 시도)' : '없음'} · 이름 ${collisions.nameTaken ? '있음 (참고)' : '없음'}`));
-  if (holds.length) append(block, node('p', 'error-text', '보류 사유'), flashCodeList(holds));
+  if (holds.length) append(block, node('p', 'error-text', '준비에 필요한 항목'), flashCodeList(holds));
 }
 function renderFlashResult() {
   const block = clear('#flash-result-block'), result = state.flashResult;
@@ -1107,22 +1124,20 @@ function wireFlashLane() {
     const body = flashBody(), signature = JSON.stringify(body);
     if (!body.text && !body.name) throw new Error('뉴스/트윗 원문 또는 이름을 입력하세요.');
     state.flashPreview = null; state.flashPreviewSignature = null;
+    $('#flash-launch').disabled = true;
+    $('#flash-form-note').textContent = '이름·이미지·발행 비용을 준비하고 있습니다…';
     try { state.flashPreview = await api('/api/flash-launch/preview', { method: 'POST', body }); state.flashPreviewSignature = signature; }
     catch (error) { if (error.status === 403) state.flashForbidden = true; throw error; }
     const holds = list(state.flashPreview.holds).length;
-    toast(holds ? `미리보기 보류 ${holds}건 · 발행 전 해결이 필요합니다.` : '미리보기 통과 · 지금 발행 버튼이 열렸습니다.', holds > 0);
+    toast(holds ? `미리보기에서 확인할 항목 ${holds}건이 있습니다.` : '이름과 이미지가 준비되었습니다. 아래 미리보기를 확인하세요.', holds > 0);
   }).then(() => { if (state.flashLane) renderFlashLane(); }));
   $('#flash-launch').addEventListener('click', () => busy($('#flash-launch'), async () => {
     const lane = state.flashLane || {}, preview = state.flashPreview, body = flashBody(), signature = JSON.stringify(body);
-    if (!preview || state.flashPreviewSignature !== signature || list(preview.holds).length) throw new Error('입력이 바뀌었거나 보류가 남아 있습니다. 미리보기를 다시 실행한 뒤 발행하세요.');
+    if (!flashLaunchReady(lane, flashOperator(), hotLanePaused(lane))) throw new Error(flashLaunchNote(lane, flashOperator(), hotLanePaused(lane)));
     // 같은 입력의 재시도(3초 타임아웃 등)는 같은 키로 보내 서버가 이전 요청을 돌려주게 한다.
     if (!state.flashKey || state.flashKeySignature !== signature) { state.flashKey = crypto.randomUUID(); state.flashKeySignature = signature; }
-    const naming = preview.naming || {}, pair = preview.pair || {}, buy = preview.buy || {}, live = lane.mode === 'AUTO';
-    const message = [`플래시 발행: ${display(naming.name)} ($${display(naming.symbol)})`, `페어 ${display(pair.symbol, 'ETH')} · 개발자 매수 ${flashDevBuyText(buy.devBuyWei, buy.native === false ? display(pair.symbol) : 'ETH')}`,
-      live ? '실제 메인넷 트랜잭션이 즉시 전송됩니다. 되돌릴 수 없습니다.' : `${display(lane.mode, 'PAPER')} 모드: 실제 전송 없이 기록만 남깁니다.`, '지금 발행할까요?'].join('\n');
-    if (!confirm(message)) return;
     let result;
-    try { result = await api('/api/flash-launch', { method: 'POST', headers: { 'Idempotency-Key': state.flashKey }, body }); }
+    try { result = await api('/api/flash-launch', { method: 'POST', headers: { 'Idempotency-Key': state.flashKey }, body: { ...body, previewId: preview.previewId } }); }
     catch (error) { if (error.status === 403) state.flashForbidden = true; throw error; }
     state.flashResult = result; state.flashPreview = null; state.flashPreviewSignature = null;
     const request = result?.request || {}, bad = ['held', 'failed'].includes(request.state);

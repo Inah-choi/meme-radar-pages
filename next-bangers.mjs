@@ -1,6 +1,6 @@
 // 다음 뱅어 제안 · AI 구상. GET /api/radar/next-bangers 를 읽어 제안 카드로 표시합니다.
 // 구상은 발행 결정이 아니며 모든 발행은 기존 후보 창의 수동 흐름을 거칩니다. 출처가 주지 않은 값(null)은 표시하지 않습니다.
-import {NOT_FOUND_LABEL, REGISTRY_UNAVAILABLE_NOTICE, laneLabels, originLabels, riskLabels} from './banger-radar.mjs?v=9f4201ed4c13d53d2f59';
+import {NOT_FOUND_LABEL, REGISTRY_UNAVAILABLE_NOTICE, laneLabels, originLabels, riskLabels} from './banger-radar.mjs?v=0191eb4b5bd74a6b7410';
 const list = value => Array.isArray(value) ? value : [];
 const number = value => typeof value === 'number' && Number.isFinite(value);
 const text = value => typeof value === 'string' ? value.trim() : '';
