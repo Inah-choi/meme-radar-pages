@@ -34,12 +34,16 @@ export function createRadarReview({api,document=globalThis.document,onNavigatePo
   function policyStatus(item){
     const decision=item.policyDecision,wrap=el('div','material-policy-status');
     add(wrap,el('span',`pill ${decision?.allowed===true?'success':decision?.allowed===false?'warning':''}`,decision?.allowed===true?'후보 조건 통과':decision?.allowed===false?'정책 보류':'정책 확인 중'));
-    if(decision?.allowed===false){
-      const reasons=rows(decision.reasons).map(reason=>typeof reason==='string'?reason:reason?.message||reason?.reason||reason?.code||'조건 미충족');
-      if(reasons.length)add(wrap,el('p','muted',reasons.slice(0,2).map(reason=>String(reason).slice(0,180)).join(' · ')));
-      if(reasons.length>2){const detail=el('details','material-policy-reasons');add(detail,el('summary','',`보류 이유 ${reasons.length}개`));for(const reason of reasons)detail.append(el('p','muted',reason));wrap.append(detail);}
-    }
     return wrap;
+  }
+  function cardDetails(item){
+    const detail=el('details','review-card-details');
+    const reasons=item.policyDecision?.allowed===false?rows(item.policyDecision.reasons).map(reason=>typeof reason==='string'?reason:reason?.message||reason?.reason||reason?.code||'조건 미충족'):[];
+    add(detail,el('summary','',`관측 맥락 · AI 아이디어${reasons.length?` · 보류 이유 ${reasons.length}개`:''}`));
+    const body=el('div','review-card-details-body');
+    add(body,marketAffinity(item),el('p','review-observed',`관측 원문 ${count(item.observed?.posts)}개 · 작성자 ${count(item.observed?.authors)}명 · 원문 시드 외 작성자 ${count(item.observed?.nonOwnerAuthors)}명`),el('p','review-context-note',`연결 맥락 ${count(item.observed?.contextPosts)}개는 소재 원문과 구분합니다.`),add(el('div','review-ai-idea'),el('span','eyebrow','AI 아이디어'),el('p','',item.whyNow||'주목 이유 미제공'),el('p','muted',item.remixHook||'재창작 아이디어 미제공')));
+    if(reasons.length){const policy=add(el('div','material-policy-reasons'),el('strong','','정책 보류 이유'));for(const reason of reasons)policy.append(el('p','muted',reason));body.append(policy);}
+    return add(detail,body);
   }
   function automationStatus(){const automation=result?.automation,wrap=clear('#review-access');const mode=!automation?'자동화 상태 확인 중':automation.mode==='PAPER'?'PAPER · 발행 시뮬레이션':automation.mode==='AUTO'?'AUTO · 정책 조건에 따라 자동 진행':String(automation.mode||'모드 미확인');const flags=[automation?.dryRun===true?'DRY_RUN · 실제 전송 없음':automation?.dryRun===false?'DRY_RUN=false':null,automation?.emergencyStop?'긴급 정지':automation?.paused?'자동화 일시정지':null].filter(Boolean);add(wrap,el('strong','',mode),el('span','',flags.length?` · ${flags.join(' · ')}`:''));const policy=el('a','text-link','자동화 정책 보기 ↗');policy.href='#policy';wrap.append(policy);}
   async function showCandidate(item){if($('#review-dialog').open)$('#review-dialog').close();try{await onOpenCandidate(item.id);}catch(err){fail(`발행 구상을 열지 못했습니다: ${err.message}`);}}
@@ -48,13 +52,13 @@ export function createRadarReview({api,document=globalThis.document,onNavigatePo
   function card(item){
     const card=el('article','review-card');card.setAttribute('role','listitem');
     if(item.unavailable)return add(card,el('h3','',item.title),el('p','review-stale','현재 소재 목록에서 제외된 선택입니다. 비교에서 빼면 다른 소재를 담을 수 있습니다.'),selectButton(item));
-    add(card,add(el('div','review-card-heading'),el('h3','',item.title),el('span','pill',englishProposal(item)?'영문 구상 준비':'영문 구상 없음')),marketAffinity(item));
+    add(card,add(el('div','review-card-heading'),el('h3','',item.title),el('span','pill',englishProposal(item)?'영문 구상 준비':'영문 구상 없음')),hook(item));
     const source=sourcePost(item),image=source&&safeUrl(source.imageUrl);
-    if(image?.startsWith('https:')){const img=el('img','review-thumbnail');img.src=image;img.alt='소재 원문 첨부 이미지';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',()=>img.remove(),{once:true});card.append(img);}
-    add(card,el('p','review-source-label',source?`소재 원문 · ${source.author||'작성자 미제공'}`:'소재 원문 미확보'),metrics(source));
-    if(source)add(card,link('이 수치의 원문 ↗',source.url));
-    add(card,el('p','review-observed',`관측 원문 ${count(item.observed?.posts)}개 · 작성자 ${count(item.observed?.authors)}명 · 원문 시드 외 작성자 ${count(item.observed?.nonOwnerAuthors)}명`),el('p','review-context-note',`연결 맥락 ${count(item.observed?.contextPosts)}개는 소재 원문과 구분합니다.`),hook(item),add(el('div','review-ai-idea'),el('span','eyebrow','AI 아이디어'),el('p','',item.whyNow||'주목 이유 미제공'),el('p','muted',item.remixHook||'재창작 아이디어 미제공')));
-    add(card,policyStatus(item),add(el('div','review-card-actions'),proposalButton(item),button('원문 근거',()=>openEvidence(item)),selectButton(item)));return card;
+    const sourceBlock=el('div','review-card-source');
+    if(image?.startsWith('https:')){const img=el('img','review-thumbnail');img.src=image;img.alt='소재 원문 첨부 이미지';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',()=>img.remove(),{once:true});sourceBlock.append(img);}
+    const sourceLine=add(el('div','review-source-line'),el('p','review-source-label',source?`소재 원문 · ${source.author||'작성자 미제공'}`:'소재 원문 미확보'));
+    if(source)sourceLine.append(link('이 수치의 원문 ↗',source.url));
+    add(card,add(sourceBlock,sourceLine,metrics(source)),policyStatus(item),add(el('div','review-card-actions'),proposalButton(item),button('원문 근거',()=>openEvidence(item)),selectButton(item)),cardDetails(item));return card;
   }
   function renderCompare(){
     const panel=clear('#review-compare');panel.hidden=selected.length===0;

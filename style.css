@@ -3312,3 +3312,120 @@ th,
   .flash-form .form-grid { grid-template-columns: 1fr; }
   .flash-form .form-grid .span-two { grid-column: auto; }
 }
+
+/* Focused radar reading and dedicated launch workspaces. */
+:root { --muted: #b1beca; --faint: #94a6b5; }
+.nav-item { min-height: 46px; }
+.button:disabled { cursor: not-allowed; }
+#page-radar .stats-grid { gap: 14px; margin-bottom: 18px; }
+#page-radar .stat-card { min-height: 126px; padding: 19px 21px; }
+#page-radar .stat-value { font-size: 32px; margin-top: 8px; }
+#page-radar .stat-label { font-size: 14px; }
+#page-radar .stat-description { font-size: 12px; line-height: 1.6; }
+.radar-info { display: block; margin: 0 0 20px; padding: 13px 17px; border: 1px solid var(--border); border-radius: 10px; background: #131e27; }
+.radar-info summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.radar-info summary::-webkit-details-marker { display: none; }
+.radar-info strong { font-size: 13px; line-height: 1.6; }
+.radar-status-toggle { margin-left: auto; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.radar-status-toggle::after { content: ' ＋'; }
+.radar-info[open] .radar-status-toggle::after { content: ' −'; }
+.radar-info .radar-info-detail { display: grid; gap: 7px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.radar-info .muted { font-size: 13px; }
+.candidate-panel .panel-heading { padding: 23px 25px 18px; flex-wrap: wrap; gap: 14px; }
+.candidate-panel .panel-heading h2 { font-size: 21px; }
+.candidate-panel .panel-heading p { max-width: none; font-size: 14px; margin-top: 7px; }
+.candidate-panel .filter-row { gap: 10px; padding: 0 25px 20px; }
+.candidate-panel input, .candidate-panel select { font-size: 14px; min-height: 44px; }
+.hot-post-card { padding: 26px; gap: 24px; }
+.hot-post-meta, .hot-post-meta strong { font-size: 14px; }
+.hot-post-excerpt { font-size: 16px; line-height: 1.8; color: #e0e7ed; -webkit-line-clamp: 4; margin-top: 12px; }
+.hot-post-metric > span { font-size: 12px; }
+.hot-post-metric strong { font-size: 20px; }
+.hot-post-metrics { gap: 18px 30px; margin-top: 18px; }
+.hot-post-footer, .hot-post-footer .text-link { font-size: 12px; line-height: 1.6; }
+.hot-post-thumbnail { width: 144px; height: 144px; }
+.review-card { padding: 23px; display: flex; flex-direction: column; }
+.review-card-heading { margin-bottom: 0; }
+.review-card h3 { font-size: 20px; line-height: 1.5; }
+.review-hook { margin: 17px 0; border-radius: 0 8px 8px 0; padding: 16px; }
+.review-hook strong { font-size: 18px; }
+.review-hook p { font-size: 15px; line-height: 1.75; }
+.review-card-source { display: flow-root; }
+.review-source-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px 12px; }
+.review-source-label, .review-source-line .text-link { font-size: 13px; }
+.review-metrics { gap: 16px; }
+.review-metrics small { font-size: 12px; }
+.review-metrics strong { font-size: 18px; }
+.review-card-actions { justify-content: flex-start; margin-top: 17px; }
+.review-card-actions .button { font-size: 13px; min-height: 40px; }
+.review-card-actions .button:first-child { margin-right: auto; }
+.review-card-details { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.review-card-details summary { color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1.7; }
+.review-card-details-body { padding-top: 12px; }
+.review-card-details-body p { font-size: 14px; line-height: 1.75; }
+.review-cards { align-items: start; }
+.lane-unavailable { padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); }
+.lane-readiness { margin: 0 24px 18px; padding: 16px 18px; border: 1px solid #405944; border-radius: 10px; background: #172a22; color: #d2e9cb; font-size: 15px; line-height: 1.8; }
+.lane-readiness.warning { border-color: #685b36; background: #2b281e; color: #f0d999; }
+.lane-legend { margin: 0 24px 20px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.hot-lane-panel .panel-heading { gap: 16px; flex-wrap: wrap; }
+.hot-lane-panel .panel-heading p { font-size: 14px; max-width: 800px; line-height: 1.85; }
+.hot-lane-panel .table-wrap { max-height: 620px; overflow: auto; }
+.hot-lane-table { min-width: 780px; }
+.hot-lane-table th { position: sticky; top: 0; z-index: 1; background: #1b2935; font-size: 12px; padding: 14px 18px; }
+.hot-lane-table td { padding: 17px 18px; font-size: 14px; vertical-align: top; }
+.hot-lane-table td .muted, .lane-signal-reason { font-size: 12px; margin-top: 7px; color: var(--muted); }
+.hot-lane-table .pill { white-space: normal; overflow-wrap: anywhere; }
+.flash-step-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 24px; padding: 22px 0 18px; border-top: 1px solid var(--border); }
+.flash-step-heading > span { color: var(--lime); font-size: 12px; font-weight: 700; }
+.flash-step-heading h3 { font-size: 18px; }
+.flash-step-heading p, .flash-step-heading a { font-size: 13px; color: var(--muted); margin-left: auto; }
+.flash-form .form-grid { gap: 20px 24px; }
+.flash-form .form-grid label { font-size: 14px; gap: 8px; }
+.flash-form input, .flash-form select, .flash-form textarea { font-size: 15px; min-height: 46px; }
+.flash-form textarea { min-height: 135px; line-height: 1.8; }
+.flash-form small { font-size: 12px; line-height: 1.7; }
+.flash-actions { padding: 7px 24px 24px; gap: 12px; }
+.flash-actions .button { font-size: 14px; min-height: 44px; padding-inline: 18px; }
+#flash-form-note { width: 100%; font-size: 13px; }
+.flash-result, .flash-result h4 { font-size: 14px; }
+summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 5px; border-radius: 3px; }
+@media (max-width: 900px) and (min-width: 601px) {
+  .nav-item { font-size: 0; }
+}
+@media (max-width: 600px) {
+  .sidebar nav { justify-content: flex-start; overflow-x: auto; gap: 3px; scrollbar-width: thin; }
+  .sidebar .nav-item { font-size: 11px; flex: 0 0 68px; min-height: 51px; white-space: nowrap; }
+  #page-radar .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+  #page-radar .stat-card { padding: 15px; min-height: 120px; }
+  #page-radar .stat-label { font-size: 12px; }
+  #page-radar .stat-value { font-size: 26px; }
+  .radar-info { padding: 12px; }
+  .radar-info summary { flex-wrap: wrap; gap: 7px; }
+  .radar-info strong { font-size: 12px; flex: 1; }
+  .radar-status-toggle { font-size: 11px; }
+  .candidate-panel .panel-heading { padding: 20px 16px 16px; }
+  .candidate-panel .panel-heading h2 { font-size: 18px; }
+  .candidate-panel .panel-heading p { font-size: 13px; }
+  .candidate-panel .filter-row { padding: 0 16px 16px; }
+  .candidate-panel .search-field { flex-basis: 100%; }
+  .hot-post-card { padding: 22px 16px; gap: 12px; }
+  .hot-post-meta, .hot-post-meta strong { font-size: 12px; }
+  .hot-post-excerpt { font-size: 15px; -webkit-line-clamp: 5; }
+  .hot-post-thumbnail { width: 80px; height: 80px; }
+  .hot-post-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; }
+  .hot-post-metric { min-width: 0; }
+  .hot-post-metric strong { font-size: 18px; }
+  .review-card { padding: 18px; }
+  .review-card h3 { font-size: 19px; }
+  .review-metrics { gap: 12px; }
+  .review-card-actions { gap: 8px; }
+  .review-card-actions .button:first-child { margin-right: 0; }
+  .hot-lane-panel .panel-heading p { max-width: none; font-size: 13px; }
+  .lane-readiness { margin-inline: 16px; padding: 14px; font-size: 14px; }
+  .lane-legend { margin-inline: 16px; }
+  .flash-step-heading { margin-inline: 16px; }
+  .flash-step-heading p { width: 100%; margin-left: 0; }
+  .flash-form .form-grid { padding-inline: 16px; }
+  .flash-actions { padding-inline: 16px; }
+}

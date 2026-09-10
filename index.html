@@ -13,11 +13,11 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23c3f664'/%3E%3Cpath d='M9 28V12h4l7 10 7-10h4v16h-5v-8l-6 8-6-8v8z' fill='%23101820'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="./style.css?v=cda7d2eb68b13190e41f" />
-    <link rel="stylesheet" href="./banger-radar.css?v=cda7d2eb68b13190e41f" />
-    <link rel="stylesheet" href="./next-bangers.css?v=cda7d2eb68b13190e41f" />
-    <link rel="stylesheet" href="./my-tokens.css?v=cda7d2eb68b13190e41f" />
-    <script type="module" src="./app.js?v=cda7d2eb68b13190e41f"></script>
+    <link rel="stylesheet" href="./style.css?v=9f4201ed4c13d53d2f59" />
+    <link rel="stylesheet" href="./banger-radar.css?v=9f4201ed4c13d53d2f59" />
+    <link rel="stylesheet" href="./next-bangers.css?v=9f4201ed4c13d53d2f59" />
+    <link rel="stylesheet" href="./my-tokens.css?v=9f4201ed4c13d53d2f59" />
+    <script type="module" src="./app.js?v=9f4201ed4c13d53d2f59"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">본문 바로가기</a>
@@ -104,6 +104,9 @@
             ></a
           >
           <a href="#bangers" data-page="bangers" class="nav-item"><span class="nav-icon">◆</span>뱅어 레이더</a>
+          <div class="nav-divider"></div>
+          <a href="#flash" data-page="flash" class="nav-item"><span class="nav-icon">ϟ</span>플래시 발행</a>
+          <a href="#hot-lane" data-page="hot-lane" class="nav-item"><span class="nav-icon">◌</span>핫 레인</a>
           <a href="#launches" data-page="launches" class="nav-item"
             ><span class="nav-icon">↗</span>발행 관리</a
           >
@@ -162,7 +165,7 @@
                   >
                 </h1>
                 <p class="muted">
-                  관측된 소재의 영어 발행 구상과 자동화 상태를 확인하세요.
+                  반응이 큰 원문을 찾고, 발행할 소재를 살펴보세요.
                 </p>
               </div>
               <button id="collect-button" class="button primary">
@@ -170,109 +173,10 @@
               </button>
             </div>
             <div id="stats-grid" class="stats-grid wrap"></div>
-            <div id="hot-lane-panel" class="panel hot-lane-panel" hidden>
-              <div class="panel-heading">
-                <div>
-                  <h2>핫 레인 <span id="hot-lane-status" class="pill">확인 중</span></h2>
-                  <p id="hot-lane-summary" class="muted">교차 확인된 소재를 5초 주기로 바로 발행하는 실시간 레인입니다.</p>
-                </div>
-                <div class="hot-lane-actions">
-                  <button id="hot-lane-pause" class="button small subtle" type="button" disabled>핫 레인 일시 중지 (60분)</button>
-                  <button id="hot-lane-resume" class="button small subtle" type="button" disabled>재개</button>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table class="hot-lane-table">
-                  <thead>
-                    <tr>
-                      <th>소재 키</th>
-                      <th>상태</th>
-                      <th>신호 종류</th>
-                      <th>에코 토큰</th>
-                      <th>작성자</th>
-                      <th>시각</th>
-                    </tr>
-                  </thead>
-                  <tbody id="hot-lane-rows"></tbody>
-                </table>
-              </div>
-              <div id="hot-lane-empty" class="empty-state" hidden>최근 24시간 동안 핫 레인 신호가 없습니다.</div>
-              <p id="hot-lane-error" class="hot-lane-error" role="status" hidden></p>
-            </div>
-            <div id="flash-lane-panel" class="panel hot-lane-panel flash-lane-panel" hidden>
-              <div class="panel-heading">
-                <div>
-                  <h2>⚡ 플래시 발행 <span id="flash-lane-status" class="pill">확인 중</span></h2>
-                  <p id="flash-lane-summary" class="muted">뉴스·트윗 원문을 3초 안에 Pons V2 토큰으로 발행하는 레인입니다.</p>
-                  <p id="flash-lane-prewarm" class="muted flash-lane-line"></p>
-                  <p id="flash-lane-latency" class="muted flash-lane-line"></p>
-                </div>
-                <div class="hot-lane-actions">
-                  <button id="flash-lane-pause" class="button small subtle" type="button" disabled>플래시 레인 일시 중지 (60분)</button>
-                  <button id="flash-lane-resume" class="button small subtle" type="button" disabled>재개</button>
-                </div>
-              </div>
-              <form id="flash-form" class="flash-form" autocomplete="off">
-                <div class="form-grid">
-                  <label class="span-two">뉴스/트윗 원문
-                    <textarea id="flash-text" name="text" maxlength="4000" rows="3" placeholder="발행 소재가 된 뉴스나 트윗 원문을 그대로 붙여 넣으세요. 이름·티커는 규칙으로 뽑습니다."></textarea>
-                  </label>
-                  <label>이미지 URL (https)
-                    <input id="flash-image-url" name="imageUrl" type="url" maxlength="512" placeholder="https://… (비우면 원문 첨부 이미지 또는 정책 기본 이미지)" />
-                  </label>
-                  <label>페어 자산
-                    <select id="flash-pair" name="pair"></select>
-                    <small id="flash-pair-note"></small>
-                  </label>
-                  <label>개발자 매수
-                    <input id="flash-dev-buy" name="devBuy" inputmode="decimal" maxlength="40" placeholder="0.02" />
-                    <small id="flash-dev-buy-note"></small>
-                  </label>
-                  <label>이름 (선택 · 영어)
-                    <input id="flash-name" name="name" maxlength="64" lang="en" placeholder="규칙 이름을 덮어씁니다" />
-                  </label>
-                  <label>티커 (선택 · 영어 대문자)
-                    <input id="flash-symbol" name="symbol" maxlength="16" lang="en" placeholder="규칙 티커를 덮어씁니다" />
-                  </label>
-                </div>
-                <div class="flash-actions">
-                  <button id="flash-preview" class="button small subtle" type="button" disabled>미리보기</button>
-                  <button id="flash-launch" class="button small primary" type="button" disabled>⚡ 지금 발행</button>
-                  <span id="flash-form-note" class="muted"></span>
-                </div>
-              </form>
-              <div id="flash-preview-block" class="flash-result" hidden></div>
-              <div id="flash-result-block" class="flash-result" hidden></div>
-              <div class="table-wrap">
-                <table class="hot-lane-table flash-lane-table">
-                  <thead>
-                    <tr>
-                      <th>라벨 / 티커</th>
-                      <th>트리거</th>
-                      <th>상태</th>
-                      <th>페어</th>
-                      <th>개발자 매수</th>
-                      <th>전송까지</th>
-                      <th>게시 후</th>
-                      <th>시각</th>
-                    </tr>
-                  </thead>
-                  <tbody id="flash-lane-rows"></tbody>
-                </table>
-              </div>
-              <div id="flash-lane-empty" class="empty-state" hidden>최근 24시간 동안 플래시 발행 요청이 없습니다.</div>
-              <p id="flash-lane-error" class="hot-lane-error" role="status" hidden></p>
-            </div>
-            <div class="radar-info">
-              <div>
-                <span class="status-dot"></span
-                ><strong id="radar-status">수집 상태 확인 중</strong
-                ><span id="radar-updated" class="muted"></span>
-              </div>
-              <span id="radar-scope-note" class="muted"
-                >수집된 공개 게시물 안에서 비교합니다.</span
-              >
-            </div>
+            <details class="radar-info">
+              <summary><span class="status-dot"></span><strong id="radar-status">수집 상태 확인 중</strong><span class="radar-status-toggle">수집 상세</span></summary>
+              <div class="radar-info-detail"><span id="radar-updated" class="muted"></span><span id="radar-scope-note" class="muted">수집된 공개 게시물 안에서 비교합니다.</span></div>
+            </details>
             <div class="panel candidate-panel">
               <div class="panel-heading">
                 <div>
@@ -409,6 +313,117 @@
               <div id="banger-pulse" class="stats-grid wrap banger-pulse" aria-label="Robinhood 펄스"></div>
               <div id="banger-lanes" class="banger-lanes" aria-live="polite"></div>
               <div id="banger-empty" class="empty-state" hidden></div>
+            </div>
+          </section>
+          <section id="page-flash" class="page" hidden>
+            <div class="page-heading">
+              <div><div class="eyebrow">QUICK LAUNCH</div><h1>플래시 발행</h1><p class="muted">뉴스 한 건을 토큰으로. 입력과 발행 결과를 한곳에서 확인하세요.</p></div>
+              <a class="button subtle" href="#radar">소재 찾기 ↗</a>
+            </div>
+            <p id="flash-lane-unavailable" class="lane-unavailable" role="status">플래시 발행 상태를 불러오는 중입니다.</p>
+            <div id="flash-lane-panel" class="panel hot-lane-panel flash-lane-panel" hidden>
+              <div class="panel-heading">
+                <div>
+                  <h2>⚡ 플래시 발행 <span id="flash-lane-status" class="pill">확인 중</span></h2>
+                  <p id="flash-lane-summary" class="muted">원문을 입력하고 미리보기로 이름·이미지·비용을 확인하세요.</p>
+                  <p id="flash-lane-prewarm" class="muted flash-lane-line"></p>
+                  <p id="flash-lane-latency" class="muted flash-lane-line"></p>
+                </div>
+                <div class="hot-lane-actions">
+                  <button id="flash-lane-pause" class="button small subtle" type="button" disabled>플래시 레인 일시 중지 (60분)</button>
+                  <button id="flash-lane-resume" class="button small subtle" type="button" disabled>재개</button>
+                </div>
+              </div>
+              <div class="flash-step-heading"><span>01</span><h3>발행할 소재</h3><p>원문 입력 → 미리보기 → 발행 요청</p></div>
+              <form id="flash-form" class="flash-form" autocomplete="off">
+                <div class="form-grid">
+                  <label class="span-two">뉴스/트윗 원문
+                    <textarea id="flash-text" name="text" maxlength="4000" rows="3" placeholder="발행 소재가 된 뉴스나 트윗 원문을 그대로 붙여 넣으세요. 이름·티커는 규칙으로 뽑습니다."></textarea>
+                  </label>
+                  <label>이미지 URL (https)
+                    <input id="flash-image-url" name="imageUrl" type="url" maxlength="512" placeholder="https://… (비우면 원문 첨부 이미지 또는 정책 기본 이미지)" />
+                  </label>
+                  <label>페어 자산
+                    <select id="flash-pair" name="pair"></select>
+                    <small id="flash-pair-note"></small>
+                  </label>
+                  <label>개발자 매수
+                    <input id="flash-dev-buy" name="devBuy" inputmode="decimal" maxlength="40" placeholder="0.02" />
+                    <small id="flash-dev-buy-note"></small>
+                  </label>
+                  <label>이름 (선택 · 영어)
+                    <input id="flash-name" name="name" maxlength="64" lang="en" placeholder="규칙 이름을 덮어씁니다" />
+                  </label>
+                  <label>티커 (선택 · 영어 대문자)
+                    <input id="flash-symbol" name="symbol" maxlength="16" lang="en" placeholder="규칙 티커를 덮어씁니다" />
+                  </label>
+                </div>
+                <div class="flash-actions">
+                  <button id="flash-preview" class="button small subtle" type="button" disabled>미리보기</button>
+                  <button id="flash-launch" class="button small primary" type="button" disabled>⚡ 지금 발행</button>
+                  <span id="flash-form-note" class="muted"></span>
+                </div>
+              </form>
+              <div id="flash-preview-block" class="flash-result" hidden></div>
+              <div id="flash-result-block" class="flash-result" hidden></div>
+              <div class="flash-step-heading"><span>02</span><h3>최근 요청 기록</h3><a class="text-link" href="#launches">전체 발행 관리 ↗</a></div>
+              <div class="table-wrap">
+                <table class="hot-lane-table flash-lane-table">
+                  <thead>
+                    <tr>
+                      <th>라벨 / 티커</th>
+                      <th>트리거</th>
+                      <th>상태</th>
+                      <th>페어</th>
+                      <th>개발자 매수</th>
+                      <th>전송까지</th>
+                      <th>게시 후</th>
+                      <th>시각</th>
+                    </tr>
+                  </thead>
+                  <tbody id="flash-lane-rows"></tbody>
+                </table>
+              </div>
+              <div id="flash-lane-empty" class="empty-state" hidden>최근 24시간 동안 플래시 발행 요청이 없습니다.</div>
+              <p id="flash-lane-error" class="hot-lane-error" role="status" hidden></p>
+            </div>
+          </section>
+          <section id="page-hot-lane" class="page" hidden>
+            <div class="page-heading">
+              <div><div class="eyebrow">CROSS-CHECKED SIGNALS</div><h1>핫 레인</h1><p class="muted">교차 신호를 감시하고, 발행이 멈춘 이유를 확인하세요.</p></div>
+              <a class="button subtle" href="#policy">자동화 정책 ↗</a>
+            </div>
+            <p id="hot-lane-unavailable" class="lane-unavailable" role="status">핫 레인 상태를 불러오는 중입니다.</p>
+            <div id="hot-lane-panel" class="panel hot-lane-panel" hidden>
+              <div class="panel-heading">
+                <div>
+                  <h2>핫 레인 <span id="hot-lane-status" class="pill">확인 중</span></h2>
+                  <p id="hot-lane-summary" class="muted">교차 확인된 신호와 발행 조건을 확인합니다.</p>
+                </div>
+                <div class="hot-lane-actions">
+                  <button id="hot-lane-pause" class="button small subtle" type="button" disabled>핫 레인 일시 중지 (60분)</button>
+                  <button id="hot-lane-resume" class="button small subtle" type="button" disabled>재개</button>
+                </div>
+              </div>
+              <div id="hot-lane-readiness" class="lane-readiness" role="status"></div>
+              <p class="lane-legend">같은 소재에서 두 종류 이상 겹쳐야 발행 검토 · A 온체인 에코 · B 작성자 급증 · C 주요 계정 원문</p>
+              <div class="table-wrap">
+                <table class="hot-lane-table">
+                  <thead>
+                    <tr>
+                      <th>소재 키</th>
+                      <th>상태 / 대기 이유</th>
+                      <th>신호 종류</th>
+                      <th>에코 토큰</th>
+                      <th>작성자</th>
+                      <th>시각</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hot-lane-rows"></tbody>
+                </table>
+              </div>
+              <div id="hot-lane-empty" class="empty-state" hidden>최근 24시간 동안 핫 레인 신호가 없습니다.</div>
+              <p id="hot-lane-error" class="hot-lane-error" role="status" hidden></p>
             </div>
           </section>
           <section id="page-launches" class="page" hidden>

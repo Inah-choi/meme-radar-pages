@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=cda7d2eb68b13190e41f';
-import {createBangerRadar} from './banger-radar.mjs?v=cda7d2eb68b13190e41f';
-import {createMyTokens} from './my-tokens.mjs?v=cda7d2eb68b13190e41f';
-import {API_ORIGIN} from './deployment-config.mjs?v=cda7d2eb68b13190e41f';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=cda7d2eb68b13190e41f';
+import {createRadarReview} from './radar-review.mjs?v=9f4201ed4c13d53d2f59';
+import {createBangerRadar} from './banger-radar.mjs?v=9f4201ed4c13d53d2f59';
+import {createMyTokens} from './my-tokens.mjs?v=9f4201ed4c13d53d2f59';
+import {API_ORIGIN} from './deployment-config.mjs?v=9f4201ed4c13d53d2f59';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=9f4201ed4c13d53d2f59';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -54,6 +54,8 @@ const labels = {
   radar: "밈 레이더",
   bangers: "뱅어 레이더",
   launches: "발행 관리",
+  flash: "플래시 발행",
+  "hot-lane": "핫 레인",
   'my-tokens': "내 토큰",
   collectors: "수집 소스",
   policy: "자동화 정책",
@@ -761,7 +763,9 @@ async function refresh({ silent = false } = {}) {
     state.lastError = "";
     renderOverview();
     await refreshDraftStatus();
-    if (state.page === "radar") { await fetchCandidates(); await fetchHotLane(); await fetchFlashLane(); }
+    if (state.page === "radar") await fetchCandidates();
+    if (state.page === "hot-lane") await fetchHotLane();
+    if (state.page === "flash") await fetchFlashLane();
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
     if (state.page === "my-tokens") void myTokens.refresh();
     if (results[1].status === "rejected") throw results[1].reason;
@@ -831,7 +835,7 @@ function renderOverview() {
   if (!state.policyDirty) fillPolicy(p);
   updateAlert();
 }
-/* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 레이더 페이지에서만 GET /api/hot-lane을 읽는다. */
+/* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 핫 레인 페이지에서만 GET /api/hot-lane을 읽는다. */
 const HOT_LANE_STATES = { primed: '대기', armed: '무장', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
 function hotLaneAdmin() {
   // /api/overview는 호출자의 관리자 권한을 유동성 요청 허용 플래그로만 노출한다.
@@ -842,13 +846,16 @@ function hotLanePaused(lane) {
   return Number.isFinite(until) && until > Date.now();
 }
 async function fetchHotLane() {
-  if (state.page !== 'radar' || !state.key) return;
+  if (state.page !== 'hot-lane' || !state.key) return;
   try { state.hotLane = await api('/api/hot-lane'); state.hotLaneError = ''; }
   catch (error) { state.hotLaneError = error.message; }
   renderHotLane();
 }
 function renderHotLane() {
   const panel = $('#hot-lane-panel'), lane = state.hotLane;
+  const unavailable = $('#hot-lane-unavailable');
+  unavailable.hidden = Boolean(lane && lane.available !== false);
+  unavailable.textContent = state.hotLaneError ? `상태를 불러오지 못했습니다: ${state.hotLaneError}` : lane?.available === false ? '이 서버에서 핫 레인을 사용할 수 없습니다.' : '상태를 불러오는 중입니다.';
   if (!lane || lane.available === false) { panel.hidden = true; return; }
   panel.hidden = false;
   const paused = hotLanePaused(lane), status = $('#hot-lane-status');
@@ -860,6 +867,20 @@ function renderHotLane() {
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
   $('#hot-lane-summary').textContent = parts.join(' · ');
+  const readiness = $('#hot-lane-readiness'), policy = state.overview?.policy || {};
+  const blockers = [];
+  if (!lane.enabled) blockers.push('핫 레인 자동 발행이 꺼져 있습니다.');
+  if (lane.mode === 'PAPER') blockers.push('PAPER 모드에서는 모의 기록만 남깁니다.');
+  else if (lane.mode !== 'AUTO') blockers.push('AUTO 모드에서만 실제 발행을 진행합니다.');
+  if (policy.emergencyStop) blockers.push('긴급 정지 중입니다.');
+  else if (policy.paused) blockers.push('자동화가 일시 정지되어 있습니다.');
+  if (paused) blockers.push('핫 레인이 일시 중지되어 있습니다.');
+  if (state.overview?.network?.dryRun) blockers.push('모의 실행 설정으로 실제 전송을 하지 않습니다.');
+  if (hour.max != null && Number(hour.used) >= Number(hour.max)) blockers.push('시간당 발행 한도에 도달했습니다.');
+  if (day.max != null && Number(day.used) >= Number(day.max)) blockers.push('오늘 발행 한도에 도달했습니다.');
+  readiness.className = `lane-readiness${blockers.length ? ' warning' : ''}`;
+  readiness.textContent = blockers.length ? `현재 실제 발행 불가 · ${blockers.join(' ')}` : '자동 발행 감시 중 · 두 종류 이상 신호가 겹치면 이미지·잔액·정책을 확인합니다.';
+
   const error = $('#hot-lane-error');
   error.hidden = !state.hotLaneError;
   error.textContent = state.hotLaneError ? `핫 레인 상태 갱신 실패: ${state.hotLaneError} 마지막으로 받은 상태를 표시합니다.` : '';
@@ -868,8 +889,11 @@ function renderHotLane() {
     const stateLabel = HOT_LANE_STATES[signal.state] || display(signal.state);
     const keyCell = append(node('td'), node('strong', '', String(signal.label || signal.key || '—').slice(0, 80)));
     if (signal.label && signal.key && signal.label !== signal.key) keyCell.append(node('div', 'muted', String(signal.key).slice(0, 80)));
-    rows.append(append(node('tr'), keyCell,
-      node('td', '', signal.state === 'held' && signal.heldCode ? `${stateLabel} · ${String(signal.heldCode).slice(0, 40)}` : stateLabel),
+    const stateCell = append(node('td'), node('span', `pill${signal.state === 'held' ? ' warning' : signal.state === 'launched' ? ' success' : ''}`, signal.state === 'held' && signal.heldCode ? `${stateLabel} · ${String(signal.heldCode).slice(0, 40)}` : stateLabel));
+    const reasons = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달' };
+    const reason = reasons[signal.heldCode] || (signal.state === 'primed' ? `교차 신호 대기 · ${list(signal.classes).length}/2종류 확보` : '');
+    if (reason) stateCell.append(node('div', 'lane-signal-reason', reason));
+    rows.append(append(node('tr'), keyCell, stateCell,
       node('td', '', list(signal.classes).map(String).join('/') || '—'),
       node('td', '', `${display(signal.echoTokens, 0)}${finite(signal.echoVenues) ? ` (${signal.echoVenues}곳)` : ''}`),
       node('td', '', display(signal.burstAuthors, 0)),
@@ -881,7 +905,7 @@ function renderHotLane() {
   resume.disabled = !admin || !paused;
   pause.title = resume.title = admin ? '' : '관리자 권한이 필요합니다.';
 }
-/* 플래시 레인: 뉴스 원문을 3초 안에 발행하는 레인. 레이더 페이지에서만 GET /api/flash-lane을 읽고, 폼은 운영자 키만 보낸다. */
+/* 플래시 레인: 뉴스 원문을 3초 안에 발행하는 레인. 플래시 페이지에서만 GET /api/flash-lane을 읽고, 폼은 운영자 키만 보낸다. */
 const FLASH_STATES = { quoting: '견적 중', launching: '발행 중', launched: '발행됨', held: '보류', failed: '실패' };
 const FLASH_TRIGGERS = { operator: '운영자', tier0: '티어0 자동', api: 'API' };
 const FLASH_PAIR_REASONS = { explicit: '직접 지정', cashtag: '캐시태그 매칭', ticker: '티커 매칭', alias: '회사명 매칭', none: '자동 매칭 없음 · ETH' };
@@ -964,13 +988,16 @@ function flashPrewarmText(lane) {
   return `예열 지갑 #${display(pre.walletIndex)} ${short(pre.address)} · 잔액 ${weiToEth(pre.balanceWei)} ETH · ${funds} · 예열 페어 ${pairs} · ${pre.fresh ? '최신' : '오래됨'}${pre.configured === false ? ' · 공급자 미설정' : ''}${error}`;
 }
 async function fetchFlashLane() {
-  if (state.page !== 'radar' || !state.key) return;
+  if (state.page !== 'flash' || !state.key) return;
   try { state.flashLane = await api('/api/flash-lane'); state.flashLaneError = ''; }
   catch (error) { state.flashLaneError = error.message; }
   renderFlashLane();
 }
 function renderFlashLane() {
   const panel = $('#flash-lane-panel'), lane = state.flashLane;
+  const unavailable = $('#flash-lane-unavailable');
+  unavailable.hidden = Boolean(lane && lane.available !== false);
+  unavailable.textContent = state.flashLaneError ? `상태를 불러오지 못했습니다: ${state.flashLaneError}` : lane?.available === false ? '이 서버에서 플래시 발행을 사용할 수 없습니다.' : '상태를 불러오는 중입니다.';
   if (!lane || lane.available === false) { panel.hidden = true; return; }
   panel.hidden = false;
   const paused = hotLanePaused(lane), status = $('#flash-lane-status');
