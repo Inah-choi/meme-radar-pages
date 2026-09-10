@@ -1,6 +1,6 @@
 // 뱅어 레이더 · GET /api/radar/bangers 를 읽어 레인별 카드로 표시합니다.
 // 점수는 관측된 주목도이며 수익 확률이 아닙니다. 원천이 주지 않은 값(null)은 표시하지 않습니다.
-import {createPonsMarketReview} from './pons-market-review.mjs?v=7e999401797d8d0d9dc6';
+import {createNextBangers} from './next-bangers.mjs?v=3ccef0d2db5c7a43e966';
 const rows=value=>Array.isArray(value)?value:[];
 const finite=value=>typeof value==='number'&&Number.isFinite(value);
 const text=value=>typeof value==='string'&&value.trim()?value.trim():null;
@@ -22,12 +22,11 @@ const statusLabels={healthy:'정상',ok:'정상',active:'정상',success:'정상
 const statusTone=status=>['healthy','ok','active','success','not_modified','cached','available'].includes(status)?'ok':['error','failed','unavailable'].includes(status)?'error':['limited','blocked','rate_limited','degraded','partial'].includes(status)?'warning':'idle';
 const metricLabels=[['views','조회'],['likes','좋아요'],['reposts','재게시'],['replies','답글'],['quotes','인용']];
 const partLabels=[['attention','주목도'],['velocity','속도'],['freshness','신선도'],['origin','원천'],['image','이미지'],['risk','위험'],['duplicate','중복']];
-const tickerColumns=[['mentions','언급',count],['mentions24hAgo','24h 전',count],['growthPct','증가율',value=>`${signed(value)}%`],['upvotes','추천',count],['comments','댓글',count],['sentiment','감성',value=>String(value)]];
 export const DEFAULT_DISCLAIMER='점수는 관측된 주목도이며 수익 확률이 아닙니다. 발행 적격성은 기존 정책 규칙을 따릅니다.';
 export const EMPTY_MESSAGE='아직 이 기간에 뱅어 후보가 없습니다. 수집 소스 상태를 확인하세요.';
 
 export function createBangerRadar({api,document=globalThis.document,onOpenCandidate=()=>{},toast=()=>{}}){
-  const ponsMarket=createPonsMarketReview({api,document});
+  const nextBangers=createNextBangers({api,document,onOpenCandidate,toast});
   const $=id=>document.querySelector(id),el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!=null)n.textContent=String(value);return n;};
   const add=(parent,...children)=>{for(const child of children)if(child)parent.append(child);return parent;};
   const clear=id=>{const n=$(id);if(n)n.replaceChildren();return n;};
@@ -56,15 +55,6 @@ export function createBangerRadar({api,document=globalThis.document,onOpenCandid
     for(const key of LANE_KEYS){const lane=lanes[key];if(finite(lane?.total))grid.append(stat(laneLabels[key],count(lane.total),text(lane.description)||text(lane.label)||'이 기간 관측 원문'));}
     if(finite(coverage.withMetrics)&&finite(coverage.windowPosts)&&coverage.windowPosts>0)grid.append(stat('지표 있는 원문 비율',`${count(Math.round(coverage.withMetrics/coverage.windowPosts*1000)/10)}%`,`${count(coverage.withMetrics)} / ${count(coverage.windowPosts)} 원문${finite(coverage.noiseFloorViews)?` · 검색 유입 조회 ${count(coverage.noiseFloorViews)} 미만 제외`:''}`));
     grid.hidden=grid.children.length===0;
-    const quotes=clear('#banger-quotes');if(quotes){const items=rows(rh.topQuoteTokens).filter(entry=>text(entry?.symbol));quotes.hidden=items.length===0;if(items.length){add(quotes,el('span','banger-row-label','지금 페어되는 종목'));for(const entry of items.slice(0,12))quotes.append(el('span','banger-chip',finite(entry.pools)?`${entry.symbol} · ${count(entry.pools)}풀`:entry.symbol));}}
-    const trending=clear('#banger-trending');if(trending){const items=rows(rh.trending).filter(entry=>entry&&typeof entry==='object').slice(0,8);trending.hidden=items.length===0;if(items.length){const heading=add(el('div','banger-row-label'),el('span','','Robinhood 트렌딩'));const at=ago(rh.lastOnchainCollectedAt);if(at)heading.append(el('span','muted',` · 온체인 수집 ${at}`));trending.append(heading);const list=el('ul','banger-trending-list');
-      for(const entry of items){const name=[text(entry.tokenName),text(entry.tokenSymbol)&&`$${entry.tokenSymbol}`].filter(Boolean).join(' · ')||'이름 없음';const item=el('li','banger-trending-item');add(item,link(`${name} ↗`,entry.url)||el('strong','',name));
-        const facts=[text(entry.quoteSymbol)&&`페어 ${entry.quoteSymbol}`,finite(entry.fdvUsd)&&`FDV ${usd(entry.fdvUsd)}`,finite(entry.volume24hUsd)&&`24h 거래량 ${usd(entry.volume24hUsd)}`,clock(entry.poolCreatedAt)&&`생성 ${clock(entry.poolCreatedAt)}`,text(entry.dex)&&entry.dex].filter(Boolean);if(facts.length)item.append(el('span','muted',facts.join(' · ')));list.append(item);}
-      trending.append(list);}}
-  }
-  function renderSources(){
-    const wrap=clear('#banger-sources');if(!wrap)return;const sources=rows(result?.pulse?.sources).filter(entry=>entry&&typeof entry==='object');wrap.hidden=sources.length===0;
-    for(const source of sources){const status=String(source.status||'waiting').toLowerCase();const chip=el('span',`banger-source ${statusTone(status)}`);add(chip,el('strong','',text(source.name)||text(source.id)||'소스'),el('span','banger-source-lane',laneLabels[source.lane]||text(source.lane)||''),el('span','',statusLabels[status]||status));const at=ago(source.lastSuccessAt);if(at)chip.append(el('span','muted',`성공 ${at}`));if(finite(source.itemCount))chip.append(el('span','muted',`${count(source.itemCount)}개`));const err=text(source.error);if(err)chip.title=err.slice(0,300);wrap.append(chip);}
   }
   function metrics(item){const wrap=el('div','banger-metrics');for(const [key,label] of metricLabels){const value=item?.metrics?.[key];if(finite(value))add(wrap,add(el('span'),el('small','',label),el('strong','',count(value))));}return wrap.children.length?wrap:null;}
   function velocity(item){const v=item?.velocity;if(!finite(v?.deltaMinutes))return null;const parts=[finite(v.viewsDelta)&&`조회 ${signed(v.viewsDelta)}`,finite(v.engagementDelta)&&`반응 ${signed(v.engagementDelta)}`].filter(Boolean);return parts.length?el('p','banger-velocity',`최근 ${count(v.deltaMinutes)}분: ${parts.join(' · ')}`):null;}
@@ -100,7 +90,6 @@ export function createBangerRadar({api,document=globalThis.document,onOpenCandid
     add(body,robinhoodStatus(item),candidateBlock(item));
     const actions=el('div','banger-actions');add(actions,link('원문 열기 ↗',item.url,'button small subtle')||el('span','muted','원문 링크 없음'));
     if(item.candidate?.id!=null){const id=item.candidate.id;actions.append(button('후보 열기',async()=>{try{await onOpenCandidate(id);}catch(err){toast(`후보를 열지 못했습니다: ${err.message}`,true);}},'button small primary'));}
-    if(item.lane==='catalyst'){const jump=el('a','text-link banger-jump','페어 종목 보기 ↓');jump.href='#banger-tickers';jump.addEventListener('click',event=>{event?.preventDefault?.();$('#banger-tickers')?.scrollIntoView?.({behavior:'smooth',block:'start'});});actions.append(jump);}
     body.append(actions);return article;
   }
   function renderLanes(){
@@ -115,26 +104,16 @@ export function createBangerRadar({api,document=globalThis.document,onOpenCandid
     if(!empty.hidden)add(empty,el('strong','',result?'뱅어 후보 없음':'결과 없음'),el('p','',result?EMPTY_MESSAGE:error?'마지막 요청이 실패했습니다. 새로고침을 눌러 다시 시도하세요.':EMPTY_MESSAGE));
     if(loading&&!result){empty.hidden=false;add(empty,el('strong','','뱅어 후보를 불러오는 중'),el('p','','관측 원문과 온체인 중복 여부를 확인합니다.'));}
   }
-  function renderTickers(){
-    const panel=clear('#banger-tickers');if(!panel)return;const heat=result?.tickerHeat||{},items=rows(heat.items).filter(entry=>entry&&typeof entry==='object'&&text(entry.ticker));
-    const heading=add(el('div','banger-lane-heading'),el('h2','','WSB 티커 열기 (페어 종목 후보)'));const at=ago(heat.collectedAt);if(at)heading.append(el('span','muted',`수집 ${at}`));panel.append(heading);
-    if(!items.length){panel.append(el('p','muted','이 기간에 관측된 티커 열기 자료가 없습니다.'));return;}
-    const columns=tickerColumns.filter(([key])=>items.some(entry=>entry[key]!==null&&entry[key]!==undefined&&(typeof entry[key]==='string'?text(entry[key]):finite(entry[key]))));
-    const table=el('table','banger-ticker-table'),head=el('thead'),headRow=el('tr');headRow.append(el('th','','티커'));for(const [,label] of columns)headRow.append(el('th','',label));head.append(headRow);table.append(head);const tbody=el('tbody');
-    for(const entry of items){const tr=el('tr'),cell=el('td');const label=`$${entry.ticker}`;add(cell,link(`${label} ↗`,entry.url)||el('strong','',label));if(text(entry.name))cell.append(el('small','muted',entry.name));tr.append(cell);
-      for(const [key,,format] of columns){const value=entry[key];const ok=typeof value==='string'?Boolean(text(value)):finite(value);tr.append(el('td','',ok?format(value):''));}tbody.append(tr);}
-    table.append(tbody);const scroll=el('div','table-wrap');scroll.append(table);panel.append(scroll);
-  }
-  function renderAll(){renderStatus();renderPulse();renderSources();renderLanes();renderTickers();}
+  function renderAll(){renderStatus();renderPulse();renderLanes();}
   async function load({silent=false}={}){
     const token=++version;loading=true;error='';renderStatus();if(!result)renderLanes();
     try{const data=await api(`/api/radar/bangers?${query()}`);if(token!==version)return;result=data&&typeof data==='object'?data:null;lastAt=Date.now();}
     catch(err){if(token!==version)return;error=`뱅어 레이더 갱신 실패: ${err.message}${result?' 마지막으로 받은 결과를 표시합니다.':''}`;if(!silent)toast(error,true);}
     finally{if(token===version){loading=false;renderAll();}}
   }
-  function render(){return Promise.all([load({silent:false}),ponsMarket.refresh()]);}
-  function refresh({silent=true}={}){if(!visible()||loading)return Promise.resolve();return Promise.all([load({silent}),ponsMarket.refresh()]);}
-  function reset(){version++;result=null;loading=false;error='';lastAt=null;clearTimeout(searchTimer);ponsMarket.reset();for(const id of ['#banger-pulse','#banger-quotes','#banger-trending','#banger-sources','#banger-lanes','#banger-tickers','#banger-empty'])clear(id);renderStatus();}
+  function render(){return Promise.all([load({silent:false}),nextBangers.refresh()]);}
+  function refresh({silent=true}={}){if(!visible()||loading)return Promise.resolve();return Promise.all([load({silent}),nextBangers.refresh()]);}
+  function reset(){version++;result=null;loading=false;error='';lastAt=null;clearTimeout(searchTimer);nextBangers.reset();for(const id of ['#banger-pulse','#banger-lanes','#banger-empty'])clear(id);renderStatus();}
   for(const id of ['#banger-hours','#banger-lane','#banger-sort','#banger-exclude-launched'])$(id)?.addEventListener('change',()=>render());
   $('#banger-refresh')?.addEventListener('click',()=>render());
   $('#banger-search')?.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>render(),300);});

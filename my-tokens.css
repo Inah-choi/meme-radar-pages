@@ -1,0 +1,45 @@
+.my-tokens-status { margin: 0 0 18px; font-size: 12px; }
+.my-tokens-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin-bottom: 24px; }
+.my-tokens-stats .stat-value { font-size: clamp(20px,2.2vw,30px); overflow-wrap: anywhere; }
+.my-tokens-stats .stat-value small { font-size: 11px; color: var(--muted,#91a0af); font-weight: 500; }
+.my-tokens-stats .stat-card:nth-child(4) .stat-value { color: var(--lime,#c4f566); }
+.my-tokens-by-currency { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: 1px solid var(--line,#27333e); border-radius: 10px; font-size: 11px; line-height: 1.6; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.my-tokens-currency-line strong { color: var(--lime,#c4f566); letter-spacing: .03em; }
+.my-token-pair { display: inline-block; margin: 0 0 6px 8px; padding: 1px 7px; border: 1px solid var(--line,#27333e); border-radius: 999px; font-size: 10px; color: var(--muted,#91a0af); vertical-align: middle; }
+.my-tokens-search { max-width: 440px; width: 100%; margin-bottom: 14px; }
+.my-tokens-table-wrap { overflow-x: auto; }
+.my-tokens-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.my-tokens-table th { padding: 16px; text-align: left; font-size: 11px; color: var(--muted,#91a0af); font-weight: 500; }
+.my-tokens-table td { padding: 20px 16px; vertical-align: top; border-top: 1px solid var(--line,#27333e); font-size: 12px; white-space: normal; }
+.my-token-identity { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.my-token-image { border-radius: 12px; object-fit: cover; background: #fff; flex-shrink: 0; }
+.my-token-symbol { font-size: 15px; letter-spacing: .03em; }
+.my-token-name { display: block; margin: 3px 0 6px; font-size: 11px; }
+.my-token-number { font-variant-numeric: tabular-nums; }
+.my-token-number > strong { display: block; font-size: 15px; }
+.my-token-number strong small { font-size: 10px; font-weight: 400; }
+.my-token-number > small { display: block; max-width: 160px; margin-top: 7px; font-size: 10px; line-height: 1.6; }
+.my-token-fee > strong { color: var(--lime,#c4f566); }
+.my-token-claim { margin-top: 12px; min-width: 190px; max-width: 310px; font-size: 11px; line-height: 1.6; }
+.my-token-claim > small { display: block; margin-top: 6px; }
+.my-token-claim-action { margin: 6px 6px 0 0; min-height: 34px; font-size: 11px; white-space: normal; }
+.my-token-claim-action:disabled { opacity: .5; cursor: not-allowed; }
+.my-token-claim-review { padding: 12px; border: 1px solid var(--line,#27333e); border-radius: 10px; background: var(--surface,#151e27); overflow-wrap: anywhere; }
+.my-token-claim-review > strong { color: var(--lime,#c4f566); }
+.my-token-claim-review p { margin: 8px 0; }
+.my-token-claim-review > a,.my-token-claim-review > small { display: block; margin: 8px 0; }
+.my-token-claim-execute:not(:disabled) { background: var(--lime,#c4f566); border-color: var(--lime,#c4f566); color: #142007; }
+.my-token-claim-job { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line,#27333e); overflow-wrap: anywhere; }
+.my-token-claim-job > strong,.my-token-claim-job > span,.my-token-claim-job > a { display: block; margin: 3px 0; }
+.my-token-claim-success > strong { color: var(--lime,#c4f566); }
+.my-token-number > .my-tokens-missing,.my-tokens-missing { color: var(--muted,#91a0af); font-size: 13px; font-weight: 400; }
+.my-token-detail { min-width: 250px; max-width: 360px; line-height: 1.7; overflow-wrap: anywhere; }
+.my-token-detail > span,.my-token-detail > a { display: block; margin-bottom: 3px; }
+.my-token-source { margin-top: 9px; font-size: 10px; }
+.my-token-source summary { cursor: pointer; color: var(--muted,#91a0af); }
+.my-token-source p { margin: 5px 0; }
+.my-tokens-note { font-size: 11px; line-height: 1.8; margin-top: 18px; }
+.my-tokens-note p { margin: 6px 0; }
+.my-tokens-empty { padding: 30px; text-align: center; }
+@media(max-width:1100px) { .my-tokens-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { #my-tokens-root .page-heading { align-items: flex-start; gap: 12px; flex-direction: column; } .my-tokens-stats { gap: 8px; } .my-tokens-stats .stat-card { padding: 14px; } .my-tokens-stats .stat-value { font-size: 19px; } }

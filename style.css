@@ -3278,3 +3278,37 @@ th,
 .market-affinity-link:hover { border-color: #7ca6b7; }
 @media (max-width: 1000px) { .market-families-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .market-families { padding: 15px; } .market-family { padding: 12px; } .market-token-values { gap: 6px; } }
+
+/* Hot lane: compact status panel directly under the radar stats. */
+.hot-lane-panel { margin-bottom: 20px; }
+.hot-lane-panel .panel-heading { padding-bottom: 16px; }
+.hot-lane-panel .panel-heading p { overflow-wrap: anywhere; }
+.hot-lane-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.hot-lane-table th { padding: 9px 18px; }
+.hot-lane-table td { padding: 11px 18px; font-size: 12px; }
+.hot-lane-table td .muted { font-size: 10px; margin-top: 3px; }
+.hot-lane-table strong { overflow-wrap: anywhere; white-space: normal; }
+.hot-lane-panel .empty-state { padding: 18px 23px; font-size: 12px; }
+.hot-lane-error { padding: 0 23px 16px; color: var(--warning); font-size: 12px; }
+@media (max-width: 680px) {
+  .hot-lane-panel .panel-heading { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+/* 플래시 발행 레인: 핫 레인 패널 스타일을 공유하고 운영자 폼·결과 블록만 추가한다. */
+.flash-lane-line { margin-top: 6px; font-size: 12px; }
+.flash-form .form-grid { padding: 0 23px 14px; gap: 14px 18px; }
+.flash-form .form-grid label { font-size: 11px; }
+.flash-form textarea { width: 100%; min-height: 72px; font-size: 13px; resize: vertical; }
+.flash-form input:disabled, .flash-form select:disabled, .flash-form textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+.flash-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 23px 18px; font-size: 11px; }
+.flash-result { margin: 0 23px 18px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 8px; background: #132029; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.flash-result.denied { border-color: #623b40; }
+.flash-result h4 { margin: 0 0 6px; font-size: 13px; }
+.flash-result p { margin: 0; }
+.flash-result ul { margin: 4px 0 0; padding-left: 18px; }
+.flash-result a { color: #c7ddaf; }
+.flash-lane-table td.flash-fast { color: var(--lime); font-weight: 600; }
+.flash-lane-table td.flash-slow { color: var(--warning); font-weight: 600; }
+@media (max-width: 680px) {
+  .flash-form .form-grid { grid-template-columns: 1fr; }
+  .flash-form .form-grid .span-two { grid-column: auto; }
+}

@@ -4,7 +4,6 @@ const count=value=>metric(value)===null?'미제공':value.toLocaleString('ko-KR'
 const usd=value=>metric(value)===null?'미제공':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',notation:value>=1000?'compact':'standard',maximumFractionDigits:value<1&&value>0?4:1}).format(value);
 const percent=value=>typeof value==='number'&&Number.isFinite(value)?`${value>0?'+':''}${value.toLocaleString('ko-KR',{maximumFractionDigits:2})}%`:'미제공';
 const familyId=value=>`market-family-${String(value).replace(/[^A-Za-z0-9_-]/g,'-')}`;
-const marketFlagLabels={severe24hdrawdown:'24h 큰 하락',highturnover:'거래량/유동성 높음',norecentvolume:'최근 거래량 확인 필요',paidboost:'유료 부스트 관측'};
 const safeUrl=value=>{try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)&&!url.username&&!url.password?url.href:null;}catch{return null;}};
 const englishProposal=item=>item.proposal&&[item.proposal.name,item.proposal.description].every(value=>typeof value==='string'&&/^[\t\n\r\x20-\x7e]*$/.test(value))?item.proposal:null;
 
@@ -25,28 +24,6 @@ export function createRadarReview({api,document=globalThis.document,onNavigatePo
     $('#nav-count').textContent=metric(summary.materials)===null?'—':count(summary.materials);
   }
   function metrics(item){const wrap=el('div','review-metrics');for(const [key,label] of [['views','조회'],['likes','좋아요'],['reposts','재게시'],['replies','답글']])add(wrap,add(el('span'),el('small','',label),el('strong','',count(item?.metrics?.[key]))));return wrap;}
-  function marketToken(token){
-    const observed=Date.parse(token.observedAt),observedLabel=Number.isFinite(observed)?` · ${new Date(observed).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})} 관측`:'';
-    const entry=el('article','market-family-token'),name=add(el('div','market-token-name'),link(`${token.name||'이름 미제공'}${token.symbol?` · $${token.symbol}`:''} ↗`,token.url),el('span','market-token-chain',`${token.chain||'체인 미제공'}${observedLabel}`));
-    if(token.address)name.title=`${token.chain||''} · ${token.address}`;
-    add(entry,name);const values=el('div','market-token-values');
-    for(const [label,value] of [['24h 거래량',usd(token.volume24hUsd)],['1h 거래량',usd(token.volume1hUsd)],['유동성',usd(token.liquidityUsd)],['1h 변동',percent(token.priceChange1hPct)]])add(values,add(el('span'),el('small','',label),el('strong','',value)));
-    add(entry,values,el('p','market-token-trades',`매수 / 매도 건수 · 1h ${count(token.buys1h)} / ${count(token.sells1h)} · 24h ${count(token.buys24h)} / ${count(token.sells24h)}`));
-    const flags=[...new Set(rows(token.flags).map(flag=>marketFlagLabels[String(flag).toLowerCase().replace(/[^a-z0-9]/g,'')]).filter(Boolean))];
-    if(flags.length)entry.append(el('p','market-token-flags',flags.join(' · ')));
-    return entry;
-  }
-  function renderMarketFamilies(){
-    const panel=clear('#market-families'),snapshot=result?.marketFamilies,families=rows(snapshot?.families),heading=el('div','market-families-heading');
-    add(heading,el('h3','','지금 거래되는 파생 계열'),el('span','eyebrow','LIVE MARKET THEMES'));add(panel,heading,el('p','market-family-disclaimer','이름·테마 유사 · 공식 파생 관계 미확인'));
-    if(!families.length){panel.append(el('p','market-families-empty',loading?'최근 거래 계열을 불러오는 중입니다.':'최근 관측에서 거래량과 유동성이 확인된 유사 이름 계열이 없습니다.'));return;}
-    const observed=Date.parse(snapshot.asOf),ageLimit=metric(snapshot.maxAgeMinutes),time=Number.isFinite(observed)?new Date(observed).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'시각 미제공';
-    add(panel,el('p','market-family-meta',`${time} 집계${ageLimit!==null?` · 최근 ${count(ageLimit)}분 관측`:''} · 대표 유동성 풀의 관측값 · USD${snapshot.inputTruncated?' · 최근 저장 표본 내 계열':''}`));
-    if(Number.isFinite(observed)&&ageLimit!==null&&Date.now()-observed>ageLimit*60000)panel.append(el('p','market-token-flags','관측 정보가 오래되었습니다. 출처에서 현재 거래 상태를 확인하세요.'));
-    const grid=el('div','market-families-grid');
-    for(const family of families){const group=el('section','market-family');group.id=familyId(family.id);const tokens=rows(family.tokens);add(group,add(el('div','market-family-heading'),el('h4','',family.label||'이름 유사 계열'),el('span','muted',`${count(metric(family.tokenCount)===null?tokens.length:family.tokenCount)}개 관측 · 상위 ${Math.min(3,tokens.length)}개 표시`)));if(family.pattern)group.append(el('p','market-family-pattern',family.pattern));for(const token of tokens.slice(0,3))group.append(marketToken(token));grid.append(group);}
-    add(panel,grid,el('p','market-family-meta','소재의 이름·본문·영문 구상과 계열 단어의 연관성을 먼저 봅니다. 발행 판단은 기존 자동화 정책을 따릅니다.'));
-  }
   function marketAffinity(item){
     const families=rows(result?.marketFamilies?.families),matches=rows(item.marketFamilyMatches).filter(match=>families.some(family=>family.id===match.id)).slice(0,3);if(!matches.length)return null;
     const wrap=el('div','market-affinity');wrap.append(el('span','', '이름·본문 연관'));
@@ -89,7 +66,7 @@ export function createRadarReview({api,document=globalThis.document,onNavigatePo
   function render(){
     if(!active())return;const items=rows(result?.items),cards=clear('#review-cards');cards.setAttribute('aria-busy',String(loading));for(const item of items)cards.append(card(item));const empty=clear('#review-empty');empty.hidden=items.length>0;
     if(!items.length)add(empty,el('strong','',loading?'소재와 발행 구상을 불러오는 중':'이 조건에 맞는 소재가 없습니다'),el('p','',loading?'관측 원문과 영어 구상을 확인합니다.':'검색 조건을 조정하거나 인기 게시물에서 원문을 살펴보세요.'),button('인기 게시물에서 발견 ↗',onNavigatePosts));
-    automationStatus();renderMarketFamilies();
+    automationStatus();
     $('#candidate-total').textContent=metric(result?.total)===null?'—':`${count(result.total)}개`;$('#results-label').textContent=result?`${count(result.total)}개 중 ${items.length?offset+1:0}–${offset+items.length} 표시 · 관측 원문과 영어 발행 구상`:'소재를 불러오는 중';$('#review-page-label').textContent=result?.total?`${Math.floor(offset/limit)+1} / ${Math.ceil(result.total/limit)}`:'—';$('#review-previous').disabled=loading||offset===0;$('#review-next').disabled=loading||!result||offset+items.length>=result.total;renderError();renderCompare();renderStats();onStats();
   }
   async function fetchMaterials({offset:requestedOffset=offset}={}){

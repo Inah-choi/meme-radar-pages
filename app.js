@@ -1,7 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=7e999401797d8d0d9dc6';
-import {createBangerRadar} from './banger-radar.mjs?v=7e999401797d8d0d9dc6';
-import {API_ORIGIN} from './deployment-config.mjs?v=7e999401797d8d0d9dc6';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=7e999401797d8d0d9dc6';
+import {createRadarReview} from './radar-review.mjs?v=3ccef0d2db5c7a43e966';
+import {createBangerRadar} from './banger-radar.mjs?v=3ccef0d2db5c7a43e966';
+import {createMyTokens} from './my-tokens.mjs?v=3ccef0d2db5c7a43e966';
+import {API_ORIGIN} from './deployment-config.mjs?v=3ccef0d2db5c7a43e966';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=3ccef0d2db5c7a43e966';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -18,6 +19,16 @@ const state = {
   hotLoading: false,
   hotError: "",
   hotQuery: null,
+  hotLane: null,
+  hotLaneError: "",
+  flashLane: null,
+  flashLaneError: "",
+  flashPreview: null,
+  flashPreviewSignature: null,
+  flashResult: null,
+  flashKey: null,
+  flashKeySignature: null,
+  flashForbidden: false,
   launches: [],
   page: "radar",
   favorite: false,
@@ -33,30 +44,19 @@ const state = {
   fetchingCandidates: 0,
   detailRequest: 0,
   lastSync: null,
-  observations: [],
-  observationTotal: null,
-  observationOffset: 0,
-  observationLimit: 50,
-  archiveRequest: 0,
-  archiveLoading: false,
-  capture: null,
-  market: null,
-  marketError: "",
-  gapOnly: true,
 };
 const reviewRadar = createRadarReview({api,onOpenCandidate:openCandidate,onNavigatePosts:()=>{
   $('#candidate-view').value='posts';return fetchCandidates().catch(error=>toast(error.message,true));
 }});
 const bangerRadar = createBangerRadar({api,onOpenCandidate:openCandidate,toast});
+const myTokens = createMyTokens({api, assetUrl: value => validUrl(value)});
 const labels = {
   radar: "밈 레이더",
   bangers: "뱅어 레이더",
-  market: "온체인 시장",
   launches: "발행 관리",
+  'my-tokens': "내 토큰",
   collectors: "수집 소스",
-  archive: "X 보관함",
   policy: "자동화 정책",
-  integration: "API 연동",
 };
 const statusLabels = {
   healthy: "정상",
@@ -463,20 +463,20 @@ function short(value) {
   const text = display(value, "미설정");
   return text.length > 19 ? `${text.slice(0, 9)}…${text.slice(-6)}` : text;
 }
-function weiToEth(value, maxDecimals = 6) {
+function weiToEth(value, maxDecimals = 6, decimals = 18) {
   try {
     if (value === null || value === undefined) return "—";
-    const amount = BigInt(value);
+    const amount = BigInt(value), scale = 10n ** BigInt(decimals);
     const sign = amount < 0n ? "-" : "";
     const absolute = amount < 0n ? -amount : amount;
-    const whole = absolute / 10n ** 18n;
-    const decimal = (absolute % 10n ** 18n)
+    const whole = absolute / scale;
+    const decimal = (absolute % scale)
       .toString()
-      .padStart(18, "0")
+      .padStart(decimals, "0")
       .slice(0, maxDecimals)
       .replace(/0+$/, "");
     if (whole === 0n && absolute > 0n && !decimal)
-      return `${sign}<0.${"0".repeat(maxDecimals - 1)}1`;
+      return `${sign}<${maxDecimals > 0 ? `0.${"0".repeat(maxDecimals - 1)}1` : "1"}`;
     return `${sign}${whole}${decimal ? `.${decimal}` : ""}`;
   } catch {
     return "—";
@@ -484,6 +484,26 @@ function weiToEth(value, maxDecimals = 6) {
 }
 function exactEth(value) {
   return weiToEth(value ?? "0", 18);
+}
+// Pons pair assets: the zero address (or no value) is native ETH; amounts are in the asset's own raw units.
+const nativePairToken = value => !value || /^0x0{40}$/i.test(String(value).trim());
+function pairSymbol(asset, fallback = "ETH") {
+  const symbol = typeof asset?.symbol === "string" ? asset.symbol.trim().slice(0, 32) : "";
+  return symbol || fallback;
+}
+function pairAmount(value, asset = {}) {
+  const decimals = Number.isInteger(asset?.decimals) && asset.decimals >= 0 && asset.decimals <= 77 ? asset.decimals : 18;
+  return `${weiToEth(value, Math.min(decimals, 8), decimals)} ${pairSymbol(asset)}`;
+}
+function launchPairLabel(launch) {
+  if (launch?.pairAsset?.symbol) return pairSymbol(launch.pairAsset);
+  return nativePairToken(launch?.pairToken) ? "ETH" : short(launch.pairToken);
+}
+function pairAssetsSummary(launchpad) {
+  if (!launchpad || typeof launchpad !== "object" || launchpad.pairTokens === undefined) return "ETH · 승인 페어 토큰 목록 미조회";
+  if (!Array.isArray(launchpad.pairTokens)) return `ETH만 선택 가능 · 승인 목록 조회 실패 (${launchpad.pairTokensError || "사유 미확인"})`;
+  const approved = launchpad.pairTokens.filter(asset => asset && typeof asset === "object" && !asset.native).length;
+  return approved ? `ETH 또는 Factory 승인 페어 토큰 ${approved}개 (체인 조회 · 10분 캐시)` : "ETH만 · 승인된 ERC-20 페어 토큰 없음";
 }
 function ethToWei(value) {
   const text = String(value).trim();
@@ -496,6 +516,14 @@ function ethToWei(value) {
     BigInt(whole) * 10n ** 18n +
     BigInt(fraction.padEnd(18, "0"))
   ).toString();
+}
+// Amount in an asset's own units ("0.02") → raw-unit string for that asset's decimals (a dev buy in a USDG pair uses 6).
+function assetToRawUnits(value, decimals = 18) {
+  const text = String(value).trim(), scale = Number.isInteger(decimals) && decimals >= 0 && decimals <= 77 ? decimals : 18;
+  if (!new RegExp(`^\\d+(\\.\\d{1,${Math.max(scale, 1)}})?$`).test(text) || (scale === 0 && text.includes('.')))
+    throw new Error(`Enter a decimal amount with at most ${scale} decimals.`);
+  const [whole, fraction = ""] = text.split(".");
+  return (BigInt(whole) * 10n ** BigInt(scale) + BigInt(fraction.padEnd(scale, "0") || "0")).toString();
 }
 function validUrl(value, sameOriginOnly = false) {
   if (!value) return null;
@@ -625,11 +653,7 @@ function disconnect(notify = true) {
   state.hotLoading = false;
   reviewRadar.reset();
   bangerRadar.reset();
-  state.archiveRequest++;
-  state.observations = [];
-  state.observationTotal = null;
-  state.observationOffset = 0;
-  state.capture = null;
+  myTokens.reset();
   forgetApiSession(sessionStorage, state.apiOrigin, location.origin);
   $("#workspace").hidden = true;
   $("#login-screen").hidden = false;
@@ -718,16 +742,10 @@ function statCard(
 async function refresh({ silent = false } = {}) {
   if (!state.key || state.refreshing) return;
   state.refreshing = true;
-  // /api/market is only polled on the pages that show it (radar strip, market page).
-  const marketLimit =
-    state.page === "market" ? 30 : state.page === "radar" ? 8 : null;
   try {
     const results = await Promise.allSettled([
       api("/api/overview"),
       state.page === "launches" ? api("/api/launches") : Promise.resolve(null),
-      marketLimit
-        ? api(`/api/market?limit=${marketLimit}`)
-        : Promise.resolve(null),
     ]);
     if (results[0].status === "rejected") throw results[0].reason;
     const incoming = results[0].value;
@@ -739,18 +757,13 @@ async function refresh({ silent = false } = {}) {
     state.launches = list(state.overview.launches);
     if (results[1].status === "fulfilled" && results[1].value)
       state.launches = list(results[1].value.items);
-    if (results[2].status === "fulfilled" && results[2].value) {
-      state.market = results[2].value;
-      state.marketError = "";
-    } else if (results[2].status === "rejected")
-      state.marketError = `온체인 시장 데이터 갱신 실패: ${results[2].reason.message}`;
     state.lastSync = new Date().toISOString();
     state.lastError = "";
     renderOverview();
     await refreshDraftStatus();
-    if (state.page === "radar") await fetchCandidates();
-    if (state.page === "archive") await fetchArchive();
+    if (state.page === "radar") { await fetchCandidates(); await fetchHotLane(); await fetchFlashLane(); }
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
+    if (state.page === "my-tokens") void myTokens.refresh();
     if (results[1].status === "rejected") throw results[1].reason;
   } catch (error) {
     state.lastError = `갱신 실패: ${error.message} 마지막 성공 데이터를 표시합니다.`;
@@ -814,29 +827,291 @@ function renderOverview() {
   renderStats();
   renderCollectors();
   renderLaunches();
-  renderMarketViews();
-  renderLiquidityOverview(o);
-  const hook = o.webhooks || {};
-  const webhook = clear("#webhook-status");
-  append(
-    webhook,
-    node("span", "", hook.enabled ? "◎" : "ⓘ"),
-    append(
-      node("div"),
-      node(
-        "strong",
-        "",
-        hook.enabled ? "서명된 webhook 연결됨" : "서명된 webhook 설정 필요",
-      ),
-      node(
-        "p",
-        "",
-        `전송 대기 ${hook.pending ?? 0}건 · 재시도 소진 ${hook.failed ?? 0}건. 서버의 WEBHOOK_URL과 WEBHOOK_SECRET을 설정하고 수신 측에서 서명과 타임스탬프를 검증하세요.`,
-      ),
-    ),
-  );
+  renderLaunchProtocolNote(o);
   if (!state.policyDirty) fillPolicy(p);
   updateAlert();
+}
+/* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 레이더 페이지에서만 GET /api/hot-lane을 읽는다. */
+const HOT_LANE_STATES = { primed: '대기', armed: '무장', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
+function hotLaneAdmin() {
+  // /api/overview는 호출자의 관리자 권한을 유동성 요청 허용 플래그로만 노출한다.
+  return state.overview?.dex?.canRequestLiquidity === true;
+}
+function hotLanePaused(lane) {
+  const until = Date.parse(lane?.pausedUntil || '');
+  return Number.isFinite(until) && until > Date.now();
+}
+async function fetchHotLane() {
+  if (state.page !== 'radar' || !state.key) return;
+  try { state.hotLane = await api('/api/hot-lane'); state.hotLaneError = ''; }
+  catch (error) { state.hotLaneError = error.message; }
+  renderHotLane();
+}
+function renderHotLane() {
+  const panel = $('#hot-lane-panel'), lane = state.hotLane;
+  if (!lane || lane.available === false) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const paused = hotLanePaused(lane), status = $('#hot-lane-status');
+  status.textContent = paused ? '일시 중지' : lane.enabled ? '활성' : '비활성';
+  status.className = `pill${paused ? ' warning' : lane.enabled ? ' success' : ''}`;
+  const hour = lane.caps?.hour || {}, day = lane.caps?.day || {};
+  const parts = [`${display(lane.mode, 'PAPER')} 모드`, `시간당 ${display(hour.used, 0)} / ${display(hour.max, 0)}건`, `오늘 ${display(day.used, 0)} / ${display(day.max, 0)}건`];
+  if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
+  else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
+  parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
+  $('#hot-lane-summary').textContent = parts.join(' · ');
+  const error = $('#hot-lane-error');
+  error.hidden = !state.hotLaneError;
+  error.textContent = state.hotLaneError ? `핫 레인 상태 갱신 실패: ${state.hotLaneError} 마지막으로 받은 상태를 표시합니다.` : '';
+  const rows = clear('#hot-lane-rows'), signals = list(lane.signals).slice(0, 50);
+  for (const signal of signals) {
+    const stateLabel = HOT_LANE_STATES[signal.state] || display(signal.state);
+    const keyCell = append(node('td'), node('strong', '', String(signal.label || signal.key || '—').slice(0, 80)));
+    if (signal.label && signal.key && signal.label !== signal.key) keyCell.append(node('div', 'muted', String(signal.key).slice(0, 80)));
+    rows.append(append(node('tr'), keyCell,
+      node('td', '', signal.state === 'held' && signal.heldCode ? `${stateLabel} · ${String(signal.heldCode).slice(0, 40)}` : stateLabel),
+      node('td', '', list(signal.classes).map(String).join('/') || '—'),
+      node('td', '', `${display(signal.echoTokens, 0)}${finite(signal.echoVenues) ? ` (${signal.echoVenues}곳)` : ''}`),
+      node('td', '', display(signal.burstAuthors, 0)),
+      node('td', '', date(signal.armedAt || signal.updatedAt || signal.primedAt))));
+  }
+  $('#hot-lane-empty').hidden = signals.length > 0;
+  const admin = hotLaneAdmin(), pause = $('#hot-lane-pause'), resume = $('#hot-lane-resume');
+  pause.disabled = !admin || paused;
+  resume.disabled = !admin || !paused;
+  pause.title = resume.title = admin ? '' : '관리자 권한이 필요합니다.';
+}
+/* 플래시 레인: 뉴스 원문을 3초 안에 발행하는 레인. 레이더 페이지에서만 GET /api/flash-lane을 읽고, 폼은 운영자 키만 보낸다. */
+const FLASH_STATES = { quoting: '견적 중', launching: '발행 중', launched: '발행됨', held: '보류', failed: '실패' };
+const FLASH_TRIGGERS = { operator: '운영자', tier0: '티어0 자동', api: 'API' };
+const FLASH_PAIR_REASONS = { explicit: '직접 지정', cashtag: '캐시태그 매칭', ticker: '티커 매칭', alias: '회사명 매칭', none: '자동 매칭 없음 · ETH' };
+const FLASH_BUY_SOURCES = { request: '요청 금액', policy: '정책 기본값', none: '없음' };
+const FLASH_FIELDS = ['#flash-text', '#flash-image-url', '#flash-pair', '#flash-dev-buy', '#flash-name', '#flash-symbol'];
+function flashOperator() {
+  // /api/overview는 역할을 직접 노출하지 않는다: 정책을 읽는 키를 운영자로 보고, 플래시 API가 403을 돌려주면 읽기 전용으로 내린다.
+  return hotLaneAdmin() || (Boolean(state.overview?.policy) && state.flashForbidden !== true);
+}
+function flashPairOptions() {
+  const listed = list(state.overview?.network?.launchpad?.pairTokens).filter(asset => asset && typeof asset === 'object' && typeof asset.symbol === 'string' && asset.symbol.trim());
+  return [{ value: 'auto', label: '자동 선택 (원문의 종목 · 없으면 ETH)', asset: null, native: true },
+    { value: '', label: 'ETH · 기본', asset: listed.find(asset => asset.native) || { symbol: 'ETH', decimals: 18, native: true }, native: true },
+    ...listed.filter(asset => !asset.native && /^0x[0-9a-fA-F]{40}$/.test(String(asset.address))).map(asset => ({ value: asset.address, label: `${pairSymbol(asset)} · ${asset.name || pairSymbol(asset)}`, asset, native: false }))];
+}
+function flashPairChosen() {
+  const options = flashPairOptions(), value = String($('#flash-pair').value ?? 'auto').toLowerCase();
+  return options.find(option => option.value.toLowerCase() === value) || options[0];
+}
+function renderFlashPairSelect() {
+  const select = $('#flash-pair'), options = flashPairOptions(), signature = options.map(option => option.value).join('|');
+  if (select.flashSignature !== signature) {
+    const previous = select.flashSignature === undefined ? 'auto' : String(select.value ?? 'auto');
+    clear(select);
+    for (const option of options) { const item = node('option', '', option.label); item.value = option.value; item.selected = option.value === previous; select.append(item); }
+    select.value = options.some(option => option.value === previous) ? previous : 'auto';
+    select.flashSignature = signature;
+  }
+  const chosen = flashPairChosen(), symbol = chosen.native ? 'ETH' : pairSymbol(chosen.asset);
+  $('#flash-pair-note').textContent = chosen.value === 'auto' ? '캐시태그·종목명이 보이면 승인된 종목 토큰을, 없으면 ETH를 페어로 씁니다.'
+    : chosen.native ? 'ETH 페어 · 비우면 정책의 개발자 매수 기본값이 적용됩니다.' : `${symbol} 페어 · 발행 지갑이 ${symbol}을(를) 보유하고 포워더에 승인해야 매수가 실행됩니다.`;
+  $('#flash-dev-buy-note').textContent = chosen.value === 'auto' ? 'ETH 단위 · 자동 선택이 종목 토큰을 고르면 그 자산의 원시 단위로 해석되니 종목 페어 매수는 페어를 직접 고르세요.'
+    : chosen.native ? 'ETH 단위 · 비우면 정책 기본값 · 0 = 매수 없음' : `${symbol} 원시 단위(raw units, decimals ${chosen.asset?.decimals ?? 18}) 정수로 입력 · 비우면 매수 없음`;
+}
+function flashDevBuyText(wei, symbol = 'ETH') {
+  if (!wei || wei === '0') return '없음';
+  const asset = symbol === 'ETH' ? { symbol: 'ETH', decimals: 18 } : list(state.overview?.network?.launchpad?.pairTokens).find(entry => entry?.symbol === symbol) || { symbol };
+  return pairAmount(wei, asset);
+}
+function flashBody() {
+  const body = {}, text = String($('#flash-text').value ?? '').trim();
+  if (text) body.text = text.slice(0, 4000);
+  const imageUrl = String($('#flash-image-url').value ?? '').trim();
+  if (imageUrl) { if (!/^https:\/\/\S+$/.test(imageUrl)) throw new Error('이미지 URL은 https:// 공개 주소여야 합니다.'); body.imageUrl = imageUrl.slice(0, 512); }
+  const chosen = flashPairChosen();
+  if (chosen.value === '') body.pairSymbol = 'ETH';
+  else if (chosen.value !== 'auto') body.pairToken = chosen.value;
+  const devBuy = String($('#flash-dev-buy').value ?? '').trim();
+  if (devBuy) {
+    if (chosen.native) { try { body.devBuyWei = ethToWei(devBuy); } catch { throw new Error('개발자 매수는 0 이상의 ETH 금액이며 소수점 아래 18자리까지 입력할 수 있습니다.'); } }
+    else if (/^(?:0|[1-9][0-9]{0,29})$/.test(devBuy)) body.devBuyWei = devBuy;
+    else throw new Error(`${pairSymbol(chosen.asset)} 개발자 매수는 원시 단위 정수로 입력하세요.`);
+  }
+  const name = String($('#flash-name').value ?? '').trim(), symbol = String($('#flash-symbol').value ?? '').trim();
+  if (name) body.name = name.slice(0, 64);
+  if (symbol) body.symbol = symbol.toUpperCase().slice(0, 16);
+  return body;
+}
+function flashSignature() { try { return JSON.stringify(flashBody()); } catch { return null; } }
+function flashLaunchReady(lane, operator, paused) {
+  const preview = state.flashPreview;
+  return operator && !paused && lane.enabled === true && Boolean(preview) && list(preview.holds).length === 0 && state.flashPreviewSignature === flashSignature();
+}
+function flashLaunchNote(lane, operator, paused) {
+  if (!operator) return '운영자 권한이 필요합니다. 읽기 전용으로 표시합니다.';
+  if (paused) return '레인이 일시 중지되어 발행할 수 없습니다.';
+  if (lane.enabled !== true) return '레인이 비활성이라 발행할 수 없습니다 (정책 flashLane.enabled). 미리보기는 가능합니다.';
+  const preview = state.flashPreview;
+  if (!preview) return '미리보기가 통과해야 발행 버튼이 열립니다.';
+  if (state.flashPreviewSignature !== flashSignature()) return '입력이 바뀌었습니다. 미리보기를 다시 실행하세요.';
+  if (list(preview.holds).length) return `보류 사유가 남아 있습니다: ${list(preview.holds).map(String).join(', ')}`;
+  return lane.mode === 'AUTO' ? 'AUTO 모드 · 발행 즉시 실제 메인넷 트랜잭션이 전송됩니다.' : `${display(lane.mode, 'PAPER')} 모드 · 실제 전송 없이 기록만 남깁니다.`;
+}
+function flashPrewarmText(lane) {
+  const pre = lane.prewarm, error = lane.prewarmError ? ` · 예열 오류: ${String(lane.prewarmError).slice(0, 160)}` : '';
+  if (!pre || typeof pre !== 'object') return `예열 정보 없음${lane.enabled ? ' (10초 주기 예열 대기 중)' : ' (레인을 켜면 10초마다 예열)'}${error}`;
+  const funding = pre.funding || {};
+  const funds = funding.ok === false ? `자금 부족 ${weiToEth(funding.shortfallWei)} ETH (필요 ${weiToEth(funding.needWei)} ETH)` : funding.ok === true ? '자금 충분' : '자금 확인 불가';
+  const pairs = list(pre.warmPairs).map(entry => String(entry?.symbol || 'ETH').slice(0, 16)).join(', ') || '없음';
+  return `예열 지갑 #${display(pre.walletIndex)} ${short(pre.address)} · 잔액 ${weiToEth(pre.balanceWei)} ETH · ${funds} · 예열 페어 ${pairs} · ${pre.fresh ? '최신' : '오래됨'}${pre.configured === false ? ' · 공급자 미설정' : ''}${error}`;
+}
+async function fetchFlashLane() {
+  if (state.page !== 'radar' || !state.key) return;
+  try { state.flashLane = await api('/api/flash-lane'); state.flashLaneError = ''; }
+  catch (error) { state.flashLaneError = error.message; }
+  renderFlashLane();
+}
+function renderFlashLane() {
+  const panel = $('#flash-lane-panel'), lane = state.flashLane;
+  if (!lane || lane.available === false) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const paused = hotLanePaused(lane), status = $('#flash-lane-status');
+  status.textContent = paused ? '일시 중지' : lane.enabled ? '활성' : '비활성';
+  status.className = `pill${paused ? ' warning' : lane.enabled ? ' success' : ''}`;
+  const hour = lane.caps?.hour || {}, day = lane.caps?.day || {}, target = finite(lane.targetMs) ? number(lane.targetMs) : 3000;
+  const parts = [`${display(lane.mode, 'PAPER')} 모드`, `시간당 ${display(hour.used, 0)} / ${display(hour.max, 0)}건`, `오늘 ${display(day.used, 0)} / ${display(day.max, 0)}건`, `목표 ${target / 1000}초`];
+  if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
+  else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
+  if (lane.emergencyStop) parts.push('긴급 정지 중'); else if (lane.paused) parts.push('자동화 일시정지 중');
+  parts.push(lane.autoTier0 ? '티어0 자동 트리거 켜짐' : '티어0 자동 트리거 꺼짐');
+  $('#flash-lane-summary').textContent = parts.join(' · ');
+  $('#flash-lane-prewarm').textContent = flashPrewarmText(lane);
+  const latency = lane.latency || {};
+  $('#flash-lane-latency').textContent = `발행 ${display(latency.launched, 0)}건 · 전송까지 중앙값 ${finite(latency.medianToBroadcastMs) ? `${number(latency.medianToBroadcastMs)} ms` : '—'} · 목표 이내 ${display(latency.withinTarget, 0)}건`;
+  const error = $('#flash-lane-error');
+  error.hidden = !state.flashLaneError;
+  error.textContent = state.flashLaneError ? `플래시 레인 상태 갱신 실패: ${state.flashLaneError} 마지막으로 받은 상태를 표시합니다.` : '';
+  const rows = clear('#flash-lane-rows'), requests = list(lane.requests).slice(0, 50);
+  for (const request of requests) {
+    const data = request.data || {}, summary = request.summary || {}, stateLabel = FLASH_STATES[request.state] || display(request.state);
+    const labelCell = append(node('td'), node('strong', '', String(request.label || request.key || '—').slice(0, 80)));
+    if (data.naming?.symbol) labelCell.append(node('div', 'muted', `$${String(data.naming.symbol).slice(0, 16)}`));
+    const pairText = data.pair?.symbol ? String(data.pair.symbol).slice(0, 16) : 'ETH', toBroadcast = summary.toBroadcastMs;
+    rows.append(append(node('tr'), labelCell,
+      node('td', '', FLASH_TRIGGERS[request.trigger] || display(request.trigger)),
+      node('td', '', request.heldCode ? `${stateLabel} · ${String(request.heldCode).slice(0, 40)}` : stateLabel),
+      node('td', '', pairText),
+      node('td', '', flashDevBuyText(data.devBuyWei, pairText)),
+      node('td', finite(toBroadcast) ? (number(toBroadcast) <= target ? 'flash-fast' : 'flash-slow') : '', finite(toBroadcast) ? `${number(toBroadcast)} ms` : '—'),
+      node('td', '', finite(summary.sincePostMs) ? `${(number(summary.sincePostMs) / 1000).toFixed(1)}초` : '—'),
+      node('td', '', date(request.createdAt))));
+  }
+  $('#flash-lane-empty').hidden = requests.length > 0;
+  renderFlashPairSelect();
+  renderFlashGate(lane);
+  const admin = hotLaneAdmin(), pause = $('#flash-lane-pause'), resume = $('#flash-lane-resume');
+  pause.disabled = !admin || paused;
+  resume.disabled = !admin || !paused;
+  pause.title = resume.title = admin ? '' : '관리자 권한이 필요합니다.';
+  renderFlashPreview();
+  renderFlashResult();
+}
+function renderFlashGate(lane) {
+  const operator = flashOperator(), paused = hotLanePaused(lane);
+  for (const selector of FLASH_FIELDS) $(selector).disabled = !operator;
+  $('#flash-preview').disabled = !operator;
+  $('#flash-launch').disabled = !flashLaunchReady(lane, operator, paused);
+  $('#flash-form-note').textContent = flashLaunchNote(lane, operator, paused);
+}
+function flashCodeList(codes) {
+  const items = node('ul');
+  for (const code of list(codes)) items.append(node('li', '', String(code).slice(0, 200)));
+  return items;
+}
+function renderFlashPreview() {
+  const block = clear('#flash-preview-block'), preview = state.flashPreview;
+  block.hidden = !preview;
+  if (!preview) return;
+  const holds = list(preview.holds).map(String);
+  block.className = `flash-result${holds.length ? ' denied' : ''}`;
+  block.append(node('h4', '', holds.length ? `미리보기 · 보류 ${holds.length}건 · 발행 불가` : '미리보기 통과 · 발행 가능'));
+  const naming = preview.naming || {};
+  block.append(node('p', '', naming.ok === false ? `이름: 실패 (${display(naming.code)}) ${list(naming.reasons).map(String).join(' · ')}`
+    : `이름: ${display(naming.name)} · 티커 $${display(naming.symbol)} · 출처 ${display(naming.source)}${list(naming.alternateSymbols).length ? ` · 대안 ${list(naming.alternateSymbols).map(String).join(', ')}` : ''}`));
+  if (naming.description) block.append(node('p', 'muted', String(naming.description).slice(0, 300)));
+  const pair = preview.pair || {};
+  block.append(node('p', '', pair.error ? `페어: ${pair.error} (요청 ${display(pair.requested)})`
+    : `페어: ${display(pair.symbol, 'ETH')} · ${FLASH_PAIR_REASONS[pair.reason] || display(pair.reason)}${pair.matched ? ` · 매칭 ${String(pair.matched).slice(0, 40)}` : ''}${list(pair.avoided).length ? ` · 회피 ${list(pair.avoided).map(String).join(', ')}` : ''}`));
+  const image = preview.image || {};
+  block.append(node('p', '', image.error ? `이미지: ${image.error}` : `이미지: ${display(image.url)} (${display(image.source)})`));
+  const buy = preview.buy || {};
+  block.append(node('p', '', buy.error ? `개발자 매수: ${buy.error}${buy.devBuyWei ? ` (${weiToEth(buy.devBuyWei)} ETH)` : ''}`
+    : `개발자 매수: ${flashDevBuyText(buy.devBuyWei, buy.native === false ? display(pair.symbol) : 'ETH')} · ${FLASH_BUY_SOURCES[buy.source] || display(buy.source)}`));
+  const funding = preview.funding || {};
+  block.append(node('p', '', funding.ok === false ? `자금: 부족 ${weiToEth(funding.shortfallWei)} ETH (필요 ${weiToEth(funding.needWei)} ETH)` : `자금: ${funding.ok === true ? '충분' : '확인 불가'}${funding.needWei ? ` (필요 ${weiToEth(funding.needWei)} ETH)` : ''}`));
+  const collisions = preview.collisions || {};
+  block.append(node('p', 'muted', `최근 7일 발행 등록부 충돌: 티커 ${collisions.symbolTaken ? '있음 (대체 티커로 회전 시도)' : '없음'} · 이름 ${collisions.nameTaken ? '있음 (참고)' : '없음'}`));
+  if (holds.length) append(block, node('p', 'error-text', '보류 사유'), flashCodeList(holds));
+}
+function renderFlashResult() {
+  const block = clear('#flash-result-block'), result = state.flashResult;
+  block.hidden = !result;
+  if (!result) return;
+  const request = result.request || {}, launch = result.launch, summary = request.summary || {}, held = ['held', 'failed'].includes(request.state);
+  block.className = `flash-result${held ? ' denied' : ''}`;
+  block.append(node('h4', '', `발행 요청 ${short(request.id)}${result.replayed ? ' · 같은 키의 이전 요청 재사용' : ''}`));
+  block.append(node('p', '', `상태 ${FLASH_STATES[request.state] || display(request.state)}${request.heldCode ? ` · ${String(request.heldCode).slice(0, 40)}` : ''}${request.data?.reason ? ` · ${String(request.data.reason).slice(0, 200)}` : ''}`));
+  if (list(request.data?.reasons).length) block.append(flashCodeList(request.data.reasons));
+  block.append(node('p', '', `접수→전송 ${finite(summary.toBroadcastMs) ? `${number(summary.toBroadcastMs)} ms${summary.withinTarget ? ' · 목표 이내' : ' · 목표 초과'}` : '전송 없음'}${finite(summary.toMinedMs) ? ` · 채굴까지 ${number(summary.toMinedMs)} ms` : ''}${finite(summary.sincePostMs) ? ` · 게시 후 ${(number(summary.sincePostMs) / 1000).toFixed(1)}초` : ''}`));
+  if (launch && typeof launch === 'object') {
+    block.append(node('p', '', `발행 ${short(launch.id)} · ${display(launch.status)}${launch.txHash ? ` · TX ${short(launch.txHash)}` : ''}${launch.tokenAddress ? ` · 토큰 ${short(launch.tokenAddress)}` : ''}`));
+    const link = node('a', 'text-link', '발행 관리에서 보기 ↗');
+    link.href = '#launches';
+    block.append(link);
+  } else block.append(node('p', 'muted', '발행 작업이 만들어지지 않았습니다.'));
+}
+function wireFlashLane() {
+  $('#flash-pair').addEventListener('change', () => {
+    if (!flashPairChosen().native) $('#flash-dev-buy').value = '';
+    renderFlashPairSelect();
+    if (state.flashLane) renderFlashGate(state.flashLane);
+  });
+  $('#flash-form').addEventListener('input', () => { if (state.flashLane) renderFlashGate(state.flashLane); });
+  $('#flash-form').addEventListener('submit', event => event.preventDefault());
+  $('#flash-preview').addEventListener('click', () => busy($('#flash-preview'), async () => {
+    const body = flashBody(), signature = JSON.stringify(body);
+    if (!body.text && !body.name) throw new Error('뉴스/트윗 원문 또는 이름을 입력하세요.');
+    state.flashPreview = null; state.flashPreviewSignature = null;
+    try { state.flashPreview = await api('/api/flash-launch/preview', { method: 'POST', body }); state.flashPreviewSignature = signature; }
+    catch (error) { if (error.status === 403) state.flashForbidden = true; throw error; }
+    const holds = list(state.flashPreview.holds).length;
+    toast(holds ? `미리보기 보류 ${holds}건 · 발행 전 해결이 필요합니다.` : '미리보기 통과 · 지금 발행 버튼이 열렸습니다.', holds > 0);
+  }).then(() => { if (state.flashLane) renderFlashLane(); }));
+  $('#flash-launch').addEventListener('click', () => busy($('#flash-launch'), async () => {
+    const lane = state.flashLane || {}, preview = state.flashPreview, body = flashBody(), signature = JSON.stringify(body);
+    if (!preview || state.flashPreviewSignature !== signature || list(preview.holds).length) throw new Error('입력이 바뀌었거나 보류가 남아 있습니다. 미리보기를 다시 실행한 뒤 발행하세요.');
+    // 같은 입력의 재시도(3초 타임아웃 등)는 같은 키로 보내 서버가 이전 요청을 돌려주게 한다.
+    if (!state.flashKey || state.flashKeySignature !== signature) { state.flashKey = crypto.randomUUID(); state.flashKeySignature = signature; }
+    const naming = preview.naming || {}, pair = preview.pair || {}, buy = preview.buy || {}, live = lane.mode === 'AUTO';
+    const message = [`플래시 발행: ${display(naming.name)} ($${display(naming.symbol)})`, `페어 ${display(pair.symbol, 'ETH')} · 개발자 매수 ${flashDevBuyText(buy.devBuyWei, buy.native === false ? display(pair.symbol) : 'ETH')}`,
+      live ? '실제 메인넷 트랜잭션이 즉시 전송됩니다. 되돌릴 수 없습니다.' : `${display(lane.mode, 'PAPER')} 모드: 실제 전송 없이 기록만 남깁니다.`, '지금 발행할까요?'].join('\n');
+    if (!confirm(message)) return;
+    let result;
+    try { result = await api('/api/flash-launch', { method: 'POST', headers: { 'Idempotency-Key': state.flashKey }, body }); }
+    catch (error) { if (error.status === 403) state.flashForbidden = true; throw error; }
+    state.flashResult = result; state.flashPreview = null; state.flashPreviewSignature = null;
+    const request = result?.request || {}, bad = ['held', 'failed'].includes(request.state);
+    toast(bad ? `플래시 발행 ${FLASH_STATES[request.state]} · ${display(request.heldCode)}` : `플래시 발행 요청 ${short(request.id)} · ${FLASH_STATES[request.state] || display(request.state)}`, bad);
+  }).then(() => fetchFlashLane()));
+  // 플래시 레인 정지·재개: busy()가 버튼 잠금을 되돌린 뒤 상태를 다시 읽어 잠금을 맞춘다.
+  $('#flash-lane-pause').addEventListener('click', () => busy($('#flash-lane-pause'), async () => {
+    const policy = await api('/api/flash-lane/pause', { method: 'POST', body: { minutes: 60 } });
+    if (state.overview && policy?.flashLane) state.overview.policy = policy;
+    toast('플래시 레인을 60분간 일시 중지했습니다. 이미 전송된 발행은 취소되지 않습니다.');
+  }).then(() => fetchFlashLane()));
+  $('#flash-lane-resume').addEventListener('click', () => busy($('#flash-lane-resume'), async () => {
+    const policy = await api('/api/flash-lane/resume', { method: 'POST', body: {} });
+    if (state.overview && policy?.flashLane) state.overview.policy = policy;
+    toast('플래시 레인을 재개했습니다. 정책의 시간당·일별 한도를 그대로 적용합니다.');
+  }).then(() => fetchFlashLane()));
 }
 function renderStats() {
   if ($('#candidate-view')?.value === 'review') { reviewRadar.renderStats(); return; }
@@ -906,22 +1181,6 @@ function renderStats() {
       { unit: "ETH", budget: true, icon: "◈" },
     ),
   );
-  const gapCount =
-    o.market?.gaps ?? (state.market ? list(state.market.gaps).length : null);
-  if (!materialsView) stats.append(
-    statCard(
-      "Robinhood 갭",
-      gapCount == null ? "—" : Number(gapCount).toLocaleString("ko-KR"),
-      gapCount == null
-        ? "온체인 시장 데이터를 아직 불러오지 않았습니다"
-        : "타체인에서 뜨지만 Robinhood 목록에 없는 토큰",
-      {
-        unit: gapCount == null ? undefined : "개",
-        icon: "◈",
-        lime: number(gapCount) > 0,
-      },
-    ),
-  );
   $("#nav-count").textContent = counts.candidates ?? candidateCount;
 }
 
@@ -944,7 +1203,6 @@ async function fetchCandidates({ offset } = {}) {
   const result = await api(`/api/candidates?${params}`);
   if (version !== state.fetchingCandidates) return;
   state.candidates = list(result.items);
-  renderGapStrip();
   renderCandidates();
   renderStats();
 }
@@ -964,7 +1222,6 @@ function syncRadarView() {
     ? '인기순은 조회수·반응·게시 시각을 함께 비교합니다. AI 분석 전 원문도 표시합니다.'
     : '원문에서 찾은 소재와 확산의 근거를 확인합니다. 소재별 상세 정보에서 발행 구상을 검토할 수 있습니다.';
   $('#radar-scope-note').textContent = review?'관측 원문과 영어 구상을 기존 자동화 정책에 연결합니다.':hot ? '수집된 공개 게시물 안에서 비교합니다. X 전체 인기 순위가 아닙니다.' : '점수는 밈 신호의 강도이며 수익 확률이 아닙니다.';
-  renderGapStrip();
   renderStats();
 }
 function hotMetric(value) {
@@ -1727,141 +1984,6 @@ function originEnrichmentView(item) {
     : `분석 중 오류가 발생해 재시도 대기 중입니다.${job.nextRunAt ? ` 다음 시도 ${date(job.nextRunAt, true)}` : ""}`));
   return section;
 }
-function observationCard(item) {
-  const card = node("article", "panel observation-card");
-  const heading = node("div", "observation-heading");
-  const author = authorText(item);
-  if (author) heading.append(node("strong", "", author));
-  heading.append(node("span", "pill", observationProvenance(item)));
-  append(
-    card,
-    heading,
-    externalLink(
-      `${item.title || String(item.text || "").slice(0, 110) || "원문 보기"} ↗`,
-      item.url,
-      "observation-title",
-    ),
-  );
-  if (item.text) card.append(node("p", "observation-text", item.text));
-  const context = item.collectionContext || {};
-  const contextLine = [
-    context.kind ? `관측 위치 ${context.kind}` : null,
-    context.handle ? `계정 @${String(context.handle).replace(/^@/, "")}` : null,
-    context.listId ? `List ${context.listId}` : null,
-  ].filter(Boolean).join(" · ");
-  if (contextLine) card.append(node("p", "observation-context", contextLine));
-  append(
-    card,
-    dateMeta(item, true),
-    metricsLine(item),
-    marketLine(item),
-    externalLinksRow(item),
-  );
-  if (item.imageUrl) card.append(externalLink("첨부 이미지 원문 ↗", item.imageUrl));
-  append(card, imageFeatureView(item.imageFeatures));
-  append(card, originEnrichmentView(item));
-  if (item.origin === "browser-json")
-    card.append(node("p", "observation-notice", "이 원문은 브라우저가 수신한 JSON에서 확보했습니다. 다른 이용자에게도 공개된 글인지 확인한 결과는 아닙니다."));
-  return card;
-}
-function renderCaptureStatus() {
-  const target = clear("#capture-status");
-  const capture = state.capture;
-  if (!capture) {
-    target.append(node("div", "panel collector-summary-card", "브라우저 수신 상태를 아직 확인하지 못했습니다."));
-    clear("#capture-lists");
-    return;
-  }
-  const browser = capture.browser || {};
-  for (const [label, value, description] of [
-    ["수집 전용 키", capture.ingestConfigured ? "설정됨" : "설정 필요", "확장 설치와 X 페이지 열기는 별도입니다"],
-    ["실제 JSON 수신", `${browser.captures ?? 0}회`, browser.captures > 0 ? `마지막 수신 ${date(browser.lastReceivedAt)}` : "확장에서 받은 기록이 아직 없습니다"],
-    ["JSON에서 확보한 원문", `${browser.posts ?? 0}개`, browser.lastObservedAt ? `마지막 관측 ${date(browser.lastObservedAt)}` : "브라우저에서 X List나 프로필을 열어 관측하세요"],
-  ])
-    append(target, append(node("div", "panel collector-summary-card"),
-      node("span", "", label), node("strong", "", value), node("small", "muted", description)));
-  const listTarget = clear("#capture-lists");
-  if (browser.lastPageUrl)
-    listTarget.append(externalLink("최근 관측한 X 페이지 ↗", browser.lastPageUrl));
-  if (list(capture.lists).length) {
-    listTarget.append(node("span", "muted", "관측된 Lists"));
-    for (const item of capture.lists)
-      listTarget.append(actionButton(`List ${item.listId} · ${item.posts ?? 0}개`, async () => {
-        $("#archive-list").value = String(item.listId);
-        await fetchArchive({ offset: 0 });
-      }, "button subtle small"));
-  } else listTarget.append(node("span", "muted", "아직 관측된 X List가 없습니다."));
-}
-function renderArchive() {
-  const target = clear("#archive-items");
-  if (state.observations.length) {
-    for (const item of state.observations) target.append(observationCard(item));
-  } else {
-    target.append(node("div", "panel empty-state", state.archiveLoading
-      ? "보관된 원문을 불러오는 중입니다."
-      : "조건에 맞는 X 원문이 없습니다. 검색·계정·List·핵심·생태계 AI 필터를 확인하거나 수집된 원문이 쌓일 때까지 기다리세요."));
-  }
-  $("#archive-items").setAttribute("aria-busy", String(state.archiveLoading));
-  const first = state.observations.length ? state.observationOffset + 1 : 0;
-  const last = state.observationOffset + state.observations.length;
-  $("#archive-results").textContent = state.observationTotal == null
-    ? "보관된 원문 수 확인 중"
-    : `${state.observationTotal.toLocaleString("ko-KR")}개 중 ${first}–${state.observations.length ? last : 0}개 표시`;
-  $("#archive-page").textContent = `${Math.floor(state.observationOffset / state.observationLimit) + 1} 페이지`;
-  $("#archive-previous").disabled = state.archiveLoading || state.observationOffset === 0;
-  $("#archive-next").disabled = state.archiveLoading || state.observationTotal == null || last >= state.observationTotal;
-}
-async function fetchArchive({ offset = state.observationOffset } = {}) {
-  if (!state.key) return;
-  const request = ++state.archiveRequest;
-  state.archiveLoading = true;
-  renderArchive();
-  const params = new URLSearchParams({
-    limit: String(state.observationLimit),
-    offset: String(offset),
-  });
-  for (const [key, value] of [
-    ["q", $("#archive-search").value.trim()],
-    ["handle", $("#archive-handle").value.trim().replace(/^@/, "")],
-    ["listId", $("#archive-list").value.trim()],
-  ]) if (value) params.set(key, value);
-  if ($("#archive-origin-only").checked) params.set("originOnly", "true");
-  try {
-    const results = await Promise.allSettled([
-      api(`/api/observations?${params}`),
-      api("/api/capture-status"),
-    ]);
-    if (request !== state.archiveRequest) return;
-    const observationError = $("#archive-error");
-    if (results[0].status === "fulfilled") {
-      const result = results[0].value;
-      state.observations = list(result.items);
-      state.observationTotal = number(result.total);
-      state.observationOffset = number(result.offset);
-      state.observationLimit = number(result.limit) || 50;
-      observationError.hidden = true;
-      observationError.textContent = "";
-    } else {
-      observationError.hidden = false;
-      observationError.textContent = `원문 검색 실패: ${results[0].reason.message} 마지막 성공 결과가 있으면 유지합니다.`;
-    }
-    const captureError = $("#capture-error");
-    if (results[1].status === "fulfilled") {
-      state.capture = results[1].value;
-      captureError.hidden = true;
-      captureError.textContent = "";
-    } else {
-      captureError.hidden = false;
-      captureError.textContent = `수집 상태 확인 실패: ${results[1].reason.message}`;
-    }
-    renderCaptureStatus();
-  } finally {
-    if (request === state.archiveRequest) {
-      state.archiveLoading = false;
-      renderArchive();
-    }
-  }
-}
 // Historical transactions always use the network stored on their own launch record.
 const NETWORK_EXPLORERS = Object.freeze({
   testnet: "https://explorer.testnet.chain.robinhood.com",
@@ -1892,40 +2014,17 @@ function ponsFeeText(launchpad={},english=false) {
 function suppliedLaunchpadUrl(value) {
   try { const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password?url.href:null; } catch { return null; }
 }
-function liquidityPercentInput(value) {
-  const text=String(value??'').trim();if(!text)return null;
-  if(!/^(?:[1-9]|[1-9][0-9]|100)$/.test(text))throw new Error('유동성 공급 비율은 1–100의 정수로 입력하거나 비워 두세요.');
-  return Number(text);
-}
-function renderLiquidityOverview(overview) {
-  const dex=overview.dex||{},policy=overview.policy||{},budget=dex.budget||{};
-  const network=overview.network||{},pons=network.launchProtocol==='pons-v2';
-  $('#liquidity-policy-panel').hidden=pons;
-  if(pons){
+// One line under the launch page heading: Pons V2 fee and allocation from RPC values, or the DEX split-step note.
+function renderLaunchProtocolNote(overview) {
+  const target=$('#launch-fee-note');if(!target)return;
+  const network=overview.network||{};
+  if(network.launchProtocol==='pons-v2'){
     const launchpad=network.launchpad||{};
-    $('#dex-policy-status').textContent='Pons V2 · 별도 LP 공급 미적용';$('#dex-policy-status').className='pill info';
-    $('#liquidity-budget-panel').hidden=true;
-    $('#launch-flow-title').textContent='Pons V2 · 본딩 커브에서 생성과 거래';
-    $('#dex-launch-status').textContent=`${liquidityTokenCount(launchpad.supply)}개 토큰 전량을 본딩 커브에 배치합니다. 지정 발행 지갑은 창작자이자 수수료 수령 주소이며 초기 매수는 0 ETH입니다. 발행 수수료 ${weiToEth(launchpad.launchFeeWei,18)} ETH + 가스${network.configured===false?` · 연결 확인 필요: ${network.error||'설정 미완료'}`:''}`;
-    $('#launch-fee-note').textContent=`${ponsFeeText(launchpad)}. 창작자 수수료는 에스크로에 적립되어 별도 청구가 필요합니다. 지갑에 즉시 자동 입금되지 않습니다.`;
+    target.textContent=`Pons V2 · ${liquidityTokenCount(launchpad.supply)}개 토큰 전량 본딩 커브 배치 · 발행 수수료 ${weiToEth(launchpad.launchFeeWei,18)} ETH + 가스 · 초기 매수 0 ETH · 창작자 수수료는 에스크로에 적립되어 내 토큰에서 청구 · 페어 자산 ${pairAssetsSummary(launchpad)} · 거래·졸업·수수료는 선택한 페어 자산 단위${network.configured===false?` · 연결 확인 필요: ${network.error||'설정 미완료'}`:''}`;
     return;
   }
-  $('#launch-flow-title').textContent='토큰 배포와 거래 개시는 별도 단계입니다.';
-  $('#launch-fee-note').textContent='현재 토큰에는 별도 개발자 수수료가 없습니다. 거래 수수료 수익은 DEX 규칙과 LP 지분에 따라 결정되며, 개발자 지갑 자동 지급 기능은 없습니다.';
-  const connected=['enabled','connected'].includes(dex.status);
-  $('#dex-policy-status').textContent=dex.manualEnabled?'DEX 수동 공급 활성':connected?'DEX 연결됨':'DEX 설정 확인';
-  $('#dex-policy-status').className=`pill ${dex.manualEnabled?'success':'warning'}`;
-  $('#liquidity-budget-panel').hidden=false;
-  const percent=policy.liquidityTokenPercent;
-  const byPercent=Number.isInteger(percent)&&percent>=1&&percent<=100;
-  append(clear('#liquidity-budget'),
-    statCard('유동성 사용 비용',weiToEth(budget.spentWei),'공급 ETH와 확인된 가스 비용',{unit:'ETH',budget:true}),
-    statCard('유동성 예약 비용',weiToEth(budget.reservedWei),'진행 중 공급 ETH와 가스 예약',{unit:'ETH',budget:true}),
-    statCard('남은 유동성 예산',weiToEth(budget.remainingWei),`집계일 ${budget.date||todayLocal()}`,{unit:'ETH',budget:true,lime:true}),
-    statCard(byPercent?'공급할 토큰 비율':'공급할 토큰 수량',byPercent?String(percent):liquidityTokenCount(policy.liquidityTokenAmount),byPercent?'각 토큰의 실제 고정 공급량 기준':'건별 고정 수량',{unit:byPercent?'%':'개',budget:true}));
-  $('#liquidity-plan-summary').textContent=`토큰당 공급 ETH ${weiToEth(policy.liquidityEthWei,18)} ETH · ${byPercent?`공급량의 ${percent}%`: `${liquidityTokenCount(policy.liquidityTokenAmount)}개 토큰`} · 건별 총한도 ${weiToEth(policy.maxLiquidityPerLaunchWei,18)} ETH (공급 ETH + 가스)`;
-  const mode=overview.network?.dryRun===true?'DRY_RUN · 실제 전송 없음':overview.network?.dryRun===false?'실제 전송 설정':'DRY_RUN 상태 미확인';
-  $('#dex-launch-status').textContent=`${dex.manualEnabled?'수동 유동성 요청 활성':dex.reason||'유동성 설정과 정책을 확인하세요.'} · ${mode}. 토큰 생성 후 발행 지갑의 ETH·토큰 잔액과 별도 예산을 다시 검사합니다.`;
+  const dex=overview.dex||{};
+  target.textContent=dex.manualEnabled?'DEX 수동 유동성 공급 활성 · 토큰 생성과 거래 개시는 별도 단계입니다.':'토큰 생성과 거래 개시는 별도 단계입니다. 유동성 공급은 서버 설정과 정책에서 활성화합니다.';
 }
 function liquidityPresentation(launch, jobs = []) {
   const job = jobs.find(
@@ -2032,6 +2131,7 @@ function renderLiquidityCell(launch, jobs) {
   if(launch.launchProtocol==='pons-v2'){
     const tradable=launch.tradingStatus==='tradable',venue=launch.tradingVenue==='pons-uniswap-v4'?'V4 풀':'본딩 커브',cell=append(node('td'),badge(tradable?'success':'pending',tradable?`Pons ${venue} 거래 활성`:'Pons 거래 상태 확인 중'));
     cell.append(node('span','launch-reason','Pons V2 · 별도 V2 유동성 공급 미적용'));
+    cell.append(node('span','launch-reason',`페어 자산 ${launchPairLabel(launch)}${/^(?:0|[1-9][0-9]*)$/.test(String(launch.pairAsset?.graduationThreshold??''))?` · 졸업 기준 ${pairAmount(launch.pairAsset.graduationThreshold,launch.pairAsset)}`:''}`));
     if(launch.curveAddress)cell.append(externalLink(`본딩 커브 ${short(launch.curveAddress)} ↗`,explorerLink(launch.network,'address',launch.curveAddress),'launch-link'));
     if(launch.creatorFeeRecipient)cell.append(externalLink(`창작자 수수료 수령 ${short(launch.creatorFeeRecipient)} ↗`,explorerLink(launch.network,'address',launch.creatorFeeRecipient),'launch-link'));
     const launchpadUrl=suppliedLaunchpadUrl(launch.launchpadUrl);if(launchpadUrl)cell.append(externalLink('Pons에서 보기 ↗',launchpadUrl,'launch-link'));
@@ -2099,6 +2199,20 @@ function renderLiquidityCell(launch, jobs) {
   if(request?.error)cell.append(node('span','error-text',request.error));
   return cell;
 }
+// Flash launches: receipt → eth_sendRawTransaction accepted, from the launch row's timeline (target 3000 ms).
+function flashLaunchLatency(launch) {
+  const timeline = launch?.timeline;
+  if (!timeline || typeof timeline !== 'object') return '';
+  const from = Date.parse(timeline.receivedAt || ''), to = Date.parse(timeline.broadcastAt || launch.broadcastAt || '');
+  return Number.isFinite(from) && Number.isFinite(to) && to >= from ? ` · 전송까지 ${to - from} ms` : ' · 전송 시각 미기록';
+}
+function launchDevBuy(launch) {
+  const buy = launch?.devBuy && typeof launch.devBuy === 'object' ? launch.devBuy : launch?.estimate?.devBuy && typeof launch.estimate.devBuy === 'object' ? launch.estimate.devBuy : null;
+  const amount = buy ? (buy.quoteSpentWei ?? buy.quoteIn) : null;
+  if (!buy || !amount || amount === '0') return null;
+  const asset = { symbol: buy.currency || (buy.native === false ? launchPairLabel(launch) : 'ETH'), decimals: Number.isInteger(buy.decimals) ? buy.decimals : launch.pairAsset?.decimals };
+  return { buy, text: pairAmount(amount, asset), settled: Boolean(launch.devBuy && typeof launch.devBuy === 'object') };
+}
 function renderLaunches() {
   const o = state.overview || {};
   const b = o.budget || {};
@@ -2158,6 +2272,7 @@ function renderLaunches() {
           ["지갑 잔액", `${weiToEth(n.balanceWei)} ETH`],
         ]),
     ["Factory 주소", (n.launchProtocol==='pons-v2'?n.launchpad?.factoryAddress:n.factoryAddress) || "Factory 주소 설정 필요"],
+    ...(n.launchProtocol==='pons-v2'?[['페어 자산',pairAssetsSummary(n.launchpad)]]:[]),
     ["RPC", n.rpcUrl || "RPC 미설정"],
     ["추가 발행 권한", "없음 · 고정 공급량 ERC-20"],
   ];
@@ -2225,6 +2340,7 @@ function renderLaunches() {
         "launch-time",
         `${date(launch.createdAt)} · ${(launch.network || p.network || "").toUpperCase()}`,
       ),
+      launch.requestMode === 'flash' ? node('div', 'launch-time', `⚡ 플래시${flashLaunchLatency(launch)}`) : null,
     );
     const status = append(node("td"), badge(launch.status));
     if (['queued', 'held'].includes(launch.status) && !launch.txHash && !launch.tokenAddress) {
@@ -2283,6 +2399,7 @@ function renderLaunches() {
             ? settled?'발행 수수료 + 실제 가스':'발행 수수료 + 예상 가스'
             : settled ? "실제 가스 비용" : "예상 비용",
       ),
+      (buy => buy ? node('div', 'launch-time', `개발자 매수 ${buy.text}${buy.settled ? ' · 체결' : ' · 예상'}`) : null)(launchDevBuy(launch)),
     );
     const trading = renderLiquidityCell(launch, list(o.dex?.jobs));
     append(tr, job, status, chain, costs, trading);
@@ -2291,16 +2408,7 @@ function renderLaunches() {
 }
 
 function fillPolicy(policy) {
-  policy = {
-    recipientMode: "fixed",
-    liquidityTokenAmount: "1000000",
-    liquidityTokenPercent: null,
-    liquiditySlippageBps: 50,
-    liquidityDeadlineSeconds: 300,
-    maxLiquidityPerLaunchWei: "0",
-    liquidityEthWei: "1000000000000000",
-    ...policy,
-  };
+  policy = { recipientMode: "fixed", ...policy };
   const form = $("#policy-form");
   for (const [key, value] of Object.entries(policy)) {
     const field = form.elements.namedItem(key);
@@ -2313,9 +2421,6 @@ function fillPolicy(policy) {
   for (const [name, key] of [
     ["maxPerLaunchEth", "maxPerLaunchWei"],
     ["maxDailyCostEth", "maxDailyCostWei"],
-    ["maxLiquidityDailyEth", "maxLiquidityDailyWei"],
-    ["maxLiquidityPerLaunchEth", "maxLiquidityPerLaunchWei"],
-    ["liquidityEthAmount", "liquidityEthWei"],
   ])
     form.elements.namedItem(name).value = exactEth(policy[key]);
   $("#policy-version").textContent = `POLICY v${policy.version ?? "—"}`;
@@ -2344,16 +2449,8 @@ async function savePolicy(event) {
         .split(",")
         .map((v) => v.trim())
         .filter(Boolean),
-      liquidityEnabled: values.has("liquidityEnabled"),
       maxPerLaunchWei: ethToWei(values.get("maxPerLaunchEth")),
       maxDailyCostWei: ethToWei(values.get("maxDailyCostEth")),
-      maxLiquidityDailyWei: ethToWei(values.get("maxLiquidityDailyEth")),
-      maxLiquidityPerLaunchWei: ethToWei(
-        values.get("maxLiquidityPerLaunchEth"),
-      ),
-      liquidityEthWei: ethToWei(values.get("liquidityEthAmount")),
-      liquidityTokenAmount: String(values.get("liquidityTokenAmount") || "0"),
-      liquidityTokenPercent: liquidityPercentInput(values.get('liquidityTokenPercent')),
     };
     for (const key of [
       "minScore",
@@ -2363,8 +2460,6 @@ async function savePolicy(event) {
       "maxDailyLaunches",
       "minLaunchIntervalSeconds",
       "maxConsecutiveErrors",
-      "liquiditySlippageBps",
-      "liquidityDeadlineSeconds",
     ])
       payload[key] = Number(values.get(key));
     try {
@@ -2931,7 +3026,7 @@ function draftInput(form, label, name, value, full = false, textarea = false) {
   const input = node(textarea ? "textarea" : "input");
   input.name = name;
   input.value = value ?? "";
-  input.placeholder = ({name:'Sleepy Goose',symbol:'SGOOSE',supply:'1000000000',recipient:'0x...',description:'An original community meme inspired by a sleepy goose.',imageSeed:'original'})[name] || '';
+  input.placeholder = ({name:'Sleepy Goose',symbol:'SGOOSE',supply:'1000000000',recipient:'0x...',description:'An original community meme inspired by a sleepy goose.',imageSeed:'original',twitter:'meme_radar'})[name] || '';
   if (['name','symbol','description','imageSeed'].includes(name)) {
     input.lang = 'en';
     const validate = () => input.setCustomValidity(draftMetadataError(name,input.value));
@@ -2946,6 +3041,7 @@ function draftInput(form, label, name, value, full = false, textarea = false) {
   if (name === "imageSeed") input.maxLength = 64;
   if (name === "description") input.maxLength = 400;
   if (name === "name") input.maxLength = 64;
+  if (name === "twitter") { input.maxLength = 16; input.pattern = "@?[A-Za-z0-9_]{1,15}"; input.title = "X handle: 1–15 letters, digits or underscores"; }
   input.autocomplete = "off";
   append(wrapper, input);
   form.append(wrapper);
@@ -2958,6 +3054,77 @@ function draftRecipientInput(form, draft, {pons=false,creatorAddress=''}={}) {
     input.disabled = true;
     input.placeholder = "Assigned with the launch wallet";
   }
+}
+/** Pons pair asset select: '' is native ETH, other values are approved pair-token addresses from the
+ * factory list the server read on chain. A saved address outside that list stays visible but cannot be saved. */
+function draftPairInput(form, draft, launchpad = {}) {
+  const wrapper = node("label", "full-span");
+  wrapper.append(document.createTextNode("Paired asset"));
+  const select = node("select");
+  select.name = "pairToken";
+  select.autocomplete = "off";
+  const saved = typeof draft.pairToken === "string" && !nativePairToken(draft.pairToken) ? draft.pairToken.trim() : "";
+  const listed = list(launchpad.pairTokens).filter(asset => asset && typeof asset === "object" && typeof asset.symbol === "string" && asset.symbol.trim());
+  const options = [{ value: "", asset: listed.find(asset => asset.native) || { symbol: "ETH", name: "Ether", decimals: 18, native: true } },
+    ...listed.filter(asset => !asset.native && /^0x[0-9a-fA-F]{40}$/.test(String(asset.address))).map(asset => ({ value: asset.address, asset }))];
+  const known = options.find(option => option.value.toLowerCase() === saved.toLowerCase()) || null;
+  for (const option of options) {
+    const item = node("option", "", option.value ? `${pairSymbol(option.asset)} · ${option.asset.name || pairSymbol(option.asset)}` : "ETH · Ether (native)");
+    item.value = option.value;
+    item.selected = option === (known || options[0]);
+    select.append(item);
+  }
+  if (!known) {
+    const unknown = node("option", "", `${saved} · not in the approved list`);
+    unknown.value = saved; unknown.disabled = true; unknown.selected = true;
+    select.append(unknown);
+  }
+  select.value = known ? known.value : saved;
+  const help = node("small", "chart-help");
+  help.id = "draft-pair-help";
+  const listNote = launchpad.pairTokens === null ? ` · Approved pair assets could not be read (${launchpad.pairTokensError || "unknown error"}); only ETH is offered.` : "";
+  const describe = () => {
+    const chosen = options.find(option => option.value.toLowerCase() === String(select.value ?? "").toLowerCase());
+    select.setCustomValidity(chosen ? "" : "Unknown pair asset");
+    if (!chosen) { help.textContent = `Unknown pair asset: ${saved} is not in the factory's approved list read on chain. Choose ETH or an approved asset before saving.${listNote}`; return; }
+    const symbol = pairSymbol(chosen.asset), threshold = /^(?:0|[1-9][0-9]*)$/.test(String(chosen.asset.graduationThreshold ?? "")) ? `graduation at ${pairAmount(chosen.asset.graduationThreshold, chosen.asset)}` : "graduation threshold unavailable";
+    help.textContent = `${symbol} pairing: buyers trade with ${symbol} on Robinhood Chain · ${threshold}${chosen.value ? " · the launch fee stays in ETH; creator fees accrue in " + symbol : ""}${listNote}`;
+  };
+  select.addEventListener("input", describe);
+  describe();
+  append(wrapper, select, help);
+  form.append(wrapper);
+  select.pairOptions = options;
+  return select;
+}
+/** Developer buy: an optional opening buy bundled in the Pons launch transaction through the forwarder. Entered in the
+ * pair asset's units, saved as draft.devBuyWei (raw units); blank or 0 means no buy. The recipient is the launch wallet. */
+function draftDevBuyInput(form, draft, pairSelect, launchpad = {}) {
+  const wrapper = node("label", "");
+  const caption = document.createTextNode("Developer buy (ETH)");
+  wrapper.append(caption);
+  const input = node("input");
+  input.name = "devBuy"; input.id = "draft-dev-buy"; input.inputMode = "decimal"; input.autocomplete = "off"; input.placeholder = "0.02";
+  const help = node("small", "chart-help");
+  help.id = "draft-dev-buy-help";
+  const chosen = () => list(pairSelect?.pairOptions).find(option => option.value.toLowerCase() === String(pairSelect?.value ?? "").toLowerCase())?.asset || { symbol: "ETH", decimals: 18, native: true };
+  const decimalsOf = asset => Number.isInteger(asset?.decimals) && asset.decimals >= 0 && asset.decimals <= 77 ? asset.decimals : 18;
+  const saved = /^(?:0|[1-9][0-9]*)$/.test(String(draft.devBuyWei ?? "")) ? String(draft.devBuyWei) : "0";
+  input.value = saved === "0" ? "" : weiToEth(saved, decimalsOf(chosen()), decimalsOf(chosen()));
+  const describe = () => {
+    const asset = chosen(), symbol = pairSymbol(asset), decimals = decimalsOf(asset), value = String(input.value ?? "").trim();
+    caption.textContent = `Developer buy (${symbol})`;
+    const shaped = /^\d+(\.\d+)?$/.test(value) && (value.split(".")[1] || "").length <= decimals;
+    input.setCustomValidity(!value || shaped ? launchpad.devBuySupported === false && value && Number(value) > 0 ? "This server does not support a developer buy." : "" : `Enter a decimal amount in ${symbol} with at most ${decimals} decimals.`);
+    help.textContent = `Optional opening buy bundled in the launch transaction; winners typically bundle 0.02–0.1 ETH. Blank or 0 = no buy. Bought tokens go to the launch wallet (creator, snipe-tax exempt).${asset.native ? "" : ` ${symbol} pair: the launch wallet must hold ${symbol} and approve the forwarder.`}${Number.isInteger(launchpad.devBuySlippageBps) ? ` Slippage ${launchpad.devBuySlippageBps} bps.` : ""}`;
+  };
+  input.rawUnits = () => { const value = String(input.value ?? "").trim(); return !value || Number(value) === 0 ? "0" : assetToRawUnits(value, decimalsOf(chosen())); };
+  input.addEventListener("input", describe);
+  pairSelect?.addEventListener("change", describe);
+  describe();
+  append(wrapper, input, help);
+  form.append(wrapper);
+  return input;
 }
 function manualExecutionNotice() {
   const policy=state.overview?.policy||{},network=state.overview?.network||{};
@@ -3059,6 +3226,9 @@ function renderDraft() {
   const supply=draftInput(fields, pons?"Fixed supply (tokens) · entirely to bonding curve":"Fixed supply (tokens)", "supply", draft.supply);
   if(pons){supply.readOnly=true;if(ponsSupply&&draft.supply!==ponsSupply)supply.setCustomValidity(`Pons V2 requires ${ponsSupply} tokens. Create a new Pons draft to keep this saved draft unchanged.`);}
   draftRecipientInput(fields, draft, {pons,creatorAddress:state.manualLaunch?.creatorFeeRecipient||state.simulation?.estimate?.creatorFeeRecipient||state.simulation?.estimate?.walletAddress||''});
+  const pairSelect=pons?draftPairInput(fields, draft, network.launchpad||{}):null;
+  if(pons)draftDevBuyInput(fields, draft, pairSelect, network.launchpad||{});
+  draftInput(fields, "X handle (optional)", "twitter", draft.socials?.twitter || "");
   draftInput(fields, "Token description", "description", draft.description, true, true);
   draftInput(
     fields,
@@ -3159,6 +3329,8 @@ async function saveDraft() {
     [...values.entries()].map(([key, value]) => [key, ['name','description'].includes(key) ? normalizeDraftEnglishPunctuation(String(value).trim()) : String(value).trim()]),
   );
   if (pons) Object.assign(payload, { recipientMode: 'issuer', recipient: '' });
+  if ('twitter' in payload) { payload.socials = { twitter: payload.twitter.replace(/^@/, '') }; delete payload.twitter; }
+  if ('devBuy' in payload) { const devBuy = $('#draft-dev-buy'); delete payload.devBuy; payload.devBuyWei = typeof devBuy?.rawUnits === 'function' ? devBuy.rawUnits() : '0'; }
   try {
     const result = await api(
       `/api/token-drafts/${encodeURIComponent(draftId)}`,
@@ -3190,7 +3362,14 @@ function renderSimulation() {
     if(estimate&&typeof estimate==='object'){
       const cost=estimate.costWei??estimate.estimatedCostWei??estimate.maxCostWei??estimate.totalCostWei;
       if(result.launchProtocol==='pons-v2'||estimate.launchProtocol==='pons-v2'||(!result.launchProtocol&&state.overview?.network?.launchProtocol==='pons-v2')){
-        append(box,node('p','','Pons V2 · Initial buy: 0 ETH'),node('p','',`Transaction value · launch fee: ${weiToEth(estimate.launchFeeWei,18)} ETH`),node('p','',`Estimated gas: ${weiToEth(estimate.gasCostWei,18)} ETH`),node('p','',`Maximum fee + gas: ${weiToEth(estimate.maxCostWei,18)} ETH`));
+        const buy=estimate.devBuy&&typeof estimate.devBuy==='object'&&estimate.devBuy.quoteIn&&estimate.devBuy.quoteIn!=='0'?estimate.devBuy:null;
+        const buyAsset=buy?{symbol:buy.currency||(buy.native===false?pairSymbol(estimate.pairAsset):'ETH'),decimals:Number.isInteger(buy.decimals)?buy.decimals:estimate.pairAsset?.decimals}:null;
+        append(box,node('p','',`Pons V2 · Initial buy: ${buy?pairAmount(buy.quoteIn,buyAsset):'0 ETH'}`),node('p','',`Transaction value · launch fee: ${weiToEth(estimate.launchFeeWei,18)} ETH`),node('p','',`Estimated gas: ${weiToEth(estimate.gasCostWei,18)} ETH`),node('p','',`Maximum fee + gas: ${weiToEth(estimate.maxCostWei,18)} ETH`));
+        const pair=estimate.pairAsset;
+        if(pair&&typeof pair==='object'&&pair.symbol)box.append(node('p','',`Paired asset: ${pairSymbol(pair)} · graduation threshold ${/^(?:0|[1-9][0-9]*)$/.test(String(pair.graduationThreshold??''))?pairAmount(pair.graduationThreshold,pair):'unavailable'}`));
+        else if(!nativePairToken(estimate.pairToken))box.append(node('p','',`Paired asset: ${estimate.pairToken} · asset details unavailable`));
+        if(buy)box.append(node('p','',`Developer buy: ${pairAmount(buy.quoteIn,buyAsset)} → expected ${weiToEth(buy.expectedTokensOut,4)} tokens${buy.minTokensOut?` (min ${weiToEth(buy.minTokensOut,4)})`:''} · to forwarder ${display(buy.router||estimate.to)} · recipient ${display(buy.recipient,'launch wallet')}${buy.clamped?' · clamped':''}`));
+        if(estimate.transactionValueWei)box.append(node('p','',`Transaction value: ${weiToEth(estimate.transactionValueWei,18)} ETH${estimate.to?` · to ${estimate.to}`:''}`));
       }else box.append(node('p','',`Estimated gas cost ${weiToEth(cost)} ETH${estimate.gas||estimate.gasEstimate?` · Gas ${estimate.gas||estimate.gasEstimate}`:''}`));
       if(estimate.warning)box.append(node('p','',estimate.warning));
       if(estimate.kind)box.append(node('p','',estimate.kind==='paper-model'?'Model estimate · no RPC simulation':'RPC simulation result'));
@@ -3209,6 +3388,8 @@ function renderSimulation() {
     if(launch.launchProtocol==='pons-v2'){
       if(launch.curveAddress)box.append(externalLink('View bonding curve ↗',explorerLink(launch.network,'address',launch.curveAddress)));
       if(launch.creatorFeeRecipient)append(box,node('p','',`Creator / fee recipient: ${launch.creatorFeeRecipient}`),externalLink('View creator wallet ↗',explorerLink(launch.network,'address',launch.creatorFeeRecipient)));
+      if(launch.pairAsset||launch.pairToken)box.append(node('p','',`Paired asset: ${launchPairLabel(launch)}${/^(?:0|[1-9][0-9]*)$/.test(String(launch.pairAsset?.graduationThreshold??''))?` · graduation threshold ${pairAmount(launch.pairAsset.graduationThreshold,launch.pairAsset)}`:''}`));
+      if(launch.devBuy&&typeof launch.devBuy==='object'){const b=launch.devBuy,asset={symbol:b.native===false?launchPairLabel(launch):'ETH',decimals:launch.pairAsset?.decimals};box.append(node('p','',`Developer buy: ${pairAmount(b.quoteSpentWei??b.quoteIn,asset)} spent → ${weiToEth(b.tokensOutWei,4)} tokens${b.feeWei?` · fee ${pairAmount(b.feeWei,asset)}`:''} · recipient ${display(b.recipient,'launch wallet')}${b.refundedWei&&b.refundedWei!=='0'?` · refunded ${pairAmount(b.refundedWei,asset)}`:''}`));}
       const url=suppliedLaunchpadUrl(launch.launchpadUrl);if(url)box.append(externalLink('View on Pons ↗',url));
     }
     if(!launch.txHash)box.append(node('p','muted','No transaction hash reported yet.'));
@@ -3216,327 +3397,6 @@ function renderSimulation() {
   }
   if(state.draftStatusError)box.append(node('p','error-text',state.draftStatusError));
   $('#draft-section')?.append(box);
-}
-
-// ---- 온체인 시장 (market page + radar gap strip) ----
-function renderMarketViews() {
-  renderGapStrip();
-  renderMarket();
-}
-function tokenCell(item, { chain = true, link = false } = {}) {
-  const cell = node("div", "token-cell");
-  const image = validUrl(item.imageUrl);
-  if (image && image.startsWith("https:")) {
-    const img = node("img");
-    img.src = image;
-    img.alt = "";
-    img.loading = "lazy";
-    img.referrerPolicy = "no-referrer";
-    img.width = 24;
-    img.height = 24;
-    img.addEventListener("error", () => img.remove(), { once: true });
-    cell.append(img);
-  }
-  const market = item.market && typeof item.market === "object" ? item.market : {};
-  const symbol = item.tokenSymbol || market.tokenSymbol;
-  const address = item.tokenAddress || market.tokenAddress;
-  const name =
-    item.tokenName || market.tokenName || item.title || (address ? short(address) : "토큰");
-  const text = node("div", "token-text");
-  append(
-    text,
-    link && validUrl(item.url)
-      ? externalLink(`${name} ↗`, item.url, "token-name")
-      : node("span", "token-name", name),
-    symbol ? node("span", "token-symbol", `$${symbol}`) : null,
-    chain ? chainPill(item) : null,
-  );
-  cell.append(text);
-  if (symbol && item.itemRole === 'token_listing') text.append(actionButton('토큰명 언급 찾기', async () => {
-    $('#candidate-view').value = 'tokens';
-    $('#candidate-search').value = symbol;
-    $('#score-filter').value = '0';
-    $('#data-filter').value = 'real';
-    state.favorite = false;
-    $$('#favorite-tabs button').forEach(button => {
-      const selected = button.dataset.favorite === 'false';
-      button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
-    });
-    location.hash = 'radar';
-    await fetchCandidates();
-  }, 'text-button'));
-  return cell;
-}
-function usdCell(value) {
-  return node("td", "", compactUsd(value) ?? "—");
-}
-function linksCell(item) {
-  const wrap = node("div", "link-cell");
-  if (validUrl(item.url))
-    wrap.append(externalLink(`${hostLabel(item.url)} ↗`, item.url));
-  for (const link of list(item.externalLinks)
-    .filter((entry) => entry && typeof entry === "object" && httpsUrl(entry.url))
-    .slice(0, 4))
-    wrap.append(
-      externalLink(`${externalLinkLabels[link.type] || "링크"} ↗`, link.url),
-    );
-  if (!wrap.childElementCount) wrap.append(node("span", "muted", "링크 없음"));
-  return append(node("td"), wrap);
-}
-function poolRow(item, { listing = false } = {}) {
-  const market = item.market && typeof item.market === "object" ? item.market : {};
-  const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
-  const tr = node("tr");
-  tr.append(append(node("td"), tokenCell(item)));
-  if (listing)
-    tr.append(
-      append(node("td"), listingPill(market.listing) || node("span", "muted", "—")),
-    );
-  const created = market.poolCreatedAt || item.publishedAt;
-  tr.append(
-    created
-      ? append(node("td"), node("div", "", date(created)), node("div", "launch-time", ago(created)))
-      : node("td", "", "—"),
-  );
-  // Each column shows only the field it is labelled with; FDV and market cap are not interchangeable.
-  tr.append(
-    usdCell(market.fdvUsd ?? metrics.fdvUsd),
-    usdCell(market.liquidityUsd ?? metrics.liquidityUsd),
-    usdCell(market.volume24hUsd ?? metrics.volume24hUsd),
-  );
-  const buys = market.buys24h;
-  const sells = market.sells24h;
-  tr.append(
-    node(
-      "td",
-      "",
-      finite(buys) || finite(sells)
-        ? `${finite(buys) ? countText(buys) : "—"} / ${finite(sells) ? countText(sells) : "—"}`
-        : "—",
-    ),
-  );
-  tr.append(linksCell(item));
-  return tr;
-}
-function robinhoodStatusCell(on) {
-  const cell = node("td");
-  if (!on || typeof on !== "object") return append(cell, badge("pending", "대조 전"));
-  if (on.status === "launched") {
-    cell.append(badge("warning", "발행됨"));
-    const matches = list(on.matches).filter((m) => m && typeof m === "object");
-    const linked = matches.find((m) => validUrl(m.url));
-    if (linked)
-      cell.append(
-        externalLink(
-          `${linked.tokenSymbol ? `$${linked.tokenSymbol}` : linked.tokenName || "Robinhood 목록"} ↗`,
-          linked.url,
-          "launch-link",
-        ),
-      );
-    else if (matches.length)
-      cell.append(
-        node(
-          "span",
-          "launch-reason",
-          matches.map((m) => m.tokenSymbol || m.tokenName).filter(Boolean).join(", "),
-        ),
-      );
-    return cell;
-  }
-  return append(cell, badge("success", "미발행 · 갭"));
-}
-function gapRow(item) {
-  const market = item.market && typeof item.market === "object" ? item.market : {};
-  const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
-  const tr = node("tr");
-  tr.append(append(node("td"), tokenCell(item, { chain: false, link: true })));
-  tr.append(append(node("td"), chainPill(item) || node("span", "muted", "—")));
-  tr.append(usdCell(market.marketCapUsd ?? metrics.marketCapUsd));
-  tr.append(append(node("td"), deltaNode(market.priceChange24hPct)));
-  const reactions = ["comments", "boosts", "participants", "holders", "transactions24h"]
-    .filter((key) => finite(metrics[key]))
-    .map((key) => metricText(key, metrics[key]));
-  tr.append(node("td", "", reactions.length ? reactions.join(" · ") : "—"));
-  tr.append(
-    append(
-      node("td"),
-      node("div", "", item.sourceName || item.publisher || item.sourceId || "—"),
-      listingPill(market.listing),
-    ),
-  );
-  tr.append(robinhoodStatusCell(item.onRobinhood));
-  return tr;
-}
-function testnetRow(item) {
-  const market = item.market && typeof item.market === "object" ? item.market : {};
-  const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
-  const tr = node("tr");
-  tr.append(append(node("td"), tokenCell(item, { chain: false })));
-  tr.append(node("td", "", item.tokenSymbol || market.tokenSymbol || "—"));
-  const holders = market.holders ?? metrics.holders;
-  tr.append(node("td", "", finite(holders) ? countText(holders) : "—"));
-  tr.append(
-    append(
-      node("td"),
-      validUrl(item.url) ? externalLink("탐색기 ↗", item.url) : node("span", "muted", "링크 없음"),
-    ),
-  );
-  return tr;
-}
-function trendBlock(group) {
-  const block = node("div", "trend-block");
-  append(block, node("h3", "", group.name || group.sourceId || "트렌드"));
-  const items = list(group.items).slice(0, 10);
-  if (!items.length) {
-    block.append(node("p", "muted", "항목 없음"));
-    return block;
-  }
-  const ol = node("ol");
-  items.forEach((item, index) => {
-    const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
-    const key = ["searches", "views", "postCount", "uses", "accounts", "marketCapUsd", "volume24hUsd", "rank"]
-      .find((candidate) => finite(metrics[candidate]));
-    const title = item.title || item.tokenName || String(item.text || "").slice(0, 60) || "제목 없는 항목";
-    const li = node("li");
-    append(
-      li,
-      append(
-        node("span", "trend-title"),
-        node("span", "trend-rank", String(index + 1)),
-        validUrl(item.url) ? externalLink(`${title} ↗`, item.url, "") : node("span", "", title),
-      ),
-      key ? node("span", "trend-metric", metricText(key, metrics[key], { compact: true })) : null,
-    );
-    ol.append(li);
-  });
-  block.append(ol);
-  return block;
-}
-function fillTable(tbodySelector, emptySelector, rows, emptyText) {
-  const tbody = clear(tbodySelector);
-  for (const row of rows) tbody.append(row);
-  const empty = $(emptySelector);
-  empty.hidden = rows.length > 0;
-  empty.textContent = rows.length ? "" : emptyText;
-}
-function renderGapStrip() {
-  const panel = $("#gap-panel");
-  const gaps = list(state.market?.gaps)
-    .filter((item) => item && typeof item === "object")
-    .slice(0, 6);
-  panel.hidden = ['materials','posts','review'].includes($('#candidate-view')?.value) || !gaps.length;
-  const strip = clear("#gap-strip");
-  if (!gaps.length) return;
-  $("#gap-panel-count").textContent =
-    `${number(state.overview?.market?.gaps ?? list(state.market?.gaps).length).toLocaleString("ko-KR")}개`;
-  for (const item of gaps) {
-    const market = item.market && typeof item.market === "object" ? item.market : {};
-    const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
-    const card = node("article", "gap-card");
-    const source = [
-      item.sourceName || item.publisher || item.sourceId,
-      market.listing ? listingLabels[market.listing] || market.listing : null,
-    ].filter(Boolean).join(" · ");
-    append(
-      card,
-      tokenCell(item, { link: true }),
-      append(
-        node("div", "gap-card-line"),
-        node("span", "muted", "시총"),
-        node("strong", "", compactUsd(market.marketCapUsd ?? metrics.marketCapUsd) ?? "—"),
-      ),
-      append(node("div", "gap-card-line"), node("span", "muted", "24h"), deltaNode(market.priceChange24hPct)),
-      source ? node("div", "gap-card-source", source) : null,
-    );
-    const link = node("a", "text-link", "온체인 시장 보기 ↗");
-    link.href = "#market";
-    card.append(link);
-    strip.append(card);
-  }
-}
-function renderMarket() {
-  const m = state.market && typeof state.market === "object" ? state.market : null;
-  const rh = m?.robinhood && typeof m.robinhood === "object" ? m.robinhood : {};
-  const newPools = list(rh.newPools).filter((item) => item && typeof item === "object");
-  const trending = list(rh.trending).filter((item) => item && typeof item === "object");
-  const testnet = list(rh.testnetTokens).filter((item) => item && typeof item === "object");
-  const gaps = list(m?.gaps).filter((item) => item && typeof item === "object");
-  const crossChain = list(m?.crossChain).filter((item) => item && typeof item === "object");
-  const trends = list(m?.trends).filter((group) => group && typeof group === "object");
-  const coverage = m?.coverage && typeof m.coverage === "object" ? m.coverage : {};
-  const trendCount = trends.reduce((total, group) => total + list(group.items).length, 0);
-  const value = (count) => (m ? Number(count).toLocaleString("ko-KR") : "—");
-  const unit = m ? "개" : undefined;
-  append(
-    clear("#market-stats"),
-    statCard("Robinhood 새 풀 (48h)", value(newPools.length), "GeckoTerminal robinhood 네트워크 · 수집 시점 표본", { unit, icon: "◈" }),
-    statCard("Robinhood 트렌딩 풀", value(trending.length), "트렌딩 · 부스트 · 거래량 상위", { unit, icon: "↗", lime: trending.length > 0 }),
-    statCard("타체인 갭 후보", value(gaps.length), "다른 체인에서 뜨지만 Robinhood 목록에 없는 토큰", { unit, icon: "◎" }),
-    statCard("문화 트렌드 항목", value(trendCount), "검색 · 위키 · 소셜 트렌드 수집 항목", { unit, icon: "≡" }),
-  );
-  const error = $("#market-error");
-  error.hidden = !state.marketError;
-  error.textContent = state.marketError || "";
-  $("#market-updated").textContent = !m
-    ? state.marketError
-      ? "온체인 시장 데이터를 불러오지 못했습니다."
-      : "온체인 시장 데이터를 불러오는 중"
-    : [
-        coverage.newestCollectedAt
-          ? `최근 수집 ${date(coverage.newestCollectedAt)}`
-          : "아직 수집된 온체인 목록이 없습니다",
-        `온체인 목록 ${number(coverage.tokenListings).toLocaleString("ko-KR")}개`,
-        `트렌드 ${number(coverage.trendItems).toLocaleString("ko-KR")}개`,
-        `Robinhood 등록부 ${number(rh.registrySize).toLocaleString("ko-KR")}개`,
-      ].join(" · ");
-  const sources = clear("#market-sources");
-  for (const source of list(rh.sources).filter((entry) => entry && typeof entry === "object")) {
-    const status = String(source.status || "waiting").toLowerCase();
-    sources.append(
-      badge(
-        ["ok", "not_modified", "cached"].includes(status) ? "ok" : status,
-        `${source.name || source.id} · ${statusLabels[status] || status}${finite(source.itemCount) ? ` · ${countText(source.itemCount)}개` : ""}`,
-      ),
-    );
-  }
-  fillTable(
-    "#market-new-pools",
-    "#market-new-empty",
-    newPools.map((item) => poolRow(item)),
-    "아직 수집된 Robinhood 새 풀이 없습니다. 지금 수집을 실행하세요.",
-  );
-  fillTable(
-    "#market-trending",
-    "#market-trending-empty",
-    trending.map((item) => poolRow(item, { listing: true })),
-    "아직 수집된 Robinhood 트렌딩·거래량 상위 풀이 없습니다.",
-  );
-  const gapSource = state.gapOnly ? gaps : crossChain;
-  fillTable(
-    "#market-gaps",
-    "#market-gaps-empty",
-    gapSource.map(gapRow),
-    state.gapOnly
-      ? "갭 조건(시총 $20K 이상 또는 트렌딩·부스트, Robinhood 목록에 없음)에 맞는 토큰이 아직 없습니다."
-      : "아직 수집된 타체인 토큰 목록이 없습니다.",
-  );
-  $("#market-gap-count").textContent = `${gapSource.length}개`;
-  const trendGrid = clear("#market-trends");
-  if (trends.length) for (const group of trends) trendGrid.append(trendBlock(group));
-  else
-    trendGrid.append(
-      node(
-        "div",
-        "empty-state",
-        "아직 수집된 트렌드 항목이 없습니다. Google Trends·Wikipedia·Bluesky·Mastodon 소스가 첫 수집을 마치면 표시됩니다.",
-      ),
-    );
-  fillTable(
-    "#market-testnet",
-    "#market-testnet-empty",
-    testnet.map(testnetRow),
-    "아직 수집된 Robinhood 테스트넷 토큰이 없습니다.",
-  );
 }
 
 function navigate() {
@@ -3554,8 +3414,8 @@ function navigate() {
   });
   $("#breadcrumb-page").textContent = labels[state.page];
   document.title = `${labels[state.page]} · Meme Observatory`;
-  if (state.page === "market") renderMarket();
   if (state.page === "bangers" && state.key) bangerRadar.render();
+  if (state.page === "my-tokens" && state.key) void myTokens.render();
   if (state.key) refresh({ silent: true });
 }
 function updateApiConnectionLinks(input = state.apiOrigin) {
@@ -3663,8 +3523,20 @@ $("#emergency-button").addEventListener("click", () =>
     await refresh();
   }),
 );
+// 핫 레인 정지·재개: busy()가 버튼 잠금을 되돌린 뒤 상태를 다시 읽어 잠금을 맞춘다.
+$('#hot-lane-pause').addEventListener('click', () => busy($('#hot-lane-pause'), async () => {
+  const policy = await api('/api/hot-lane/pause', { method: 'POST', body: { minutes: 60 } });
+  if (state.overview && policy?.hotLane) state.overview.policy = policy;
+  toast('핫 레인을 60분간 일시 중지했습니다. 이미 전송된 발행은 취소되지 않습니다.');
+}).then(() => fetchHotLane()));
+$('#hot-lane-resume').addEventListener('click', () => busy($('#hot-lane-resume'), async () => {
+  const policy = await api('/api/hot-lane/resume', { method: 'POST', body: {} });
+  if (state.overview && policy?.hotLane) state.overview.policy = policy;
+  toast('핫 레인을 재개했습니다. 정책의 시간당·일별 한도를 그대로 적용합니다.');
+}).then(() => fetchHotLane()));
 for (const item of $$("[data-refresh]"))
   item.addEventListener("click", () => busy(item, () => refresh()));
+wireFlashLane();
 for (const item of $$("#favorite-tabs button"))
   item.addEventListener("click", () => {
     state.favorite = item.dataset.favorite === "true";
@@ -3699,39 +3571,6 @@ for(const [selector,direction] of [['#hot-previous',-1],['#hot-next',1]]) $(sele
 $("#collector-search").addEventListener("input", renderCollectors);
 for (const selector of ["#collector-kind-filter", "#collector-status-filter"])
   $(selector).addEventListener("change", renderCollectors);
-$("#gap-only-toggle").addEventListener("change", () => {
-  state.gapOnly = $("#gap-only-toggle").checked;
-  renderMarket();
-});
-let archiveSearchTimeout;
-function searchArchive() {
-  clearTimeout(archiveSearchTimeout);
-  return fetchArchive({ offset: 0 });
-}
-$("#archive-origin-only").addEventListener("change", () =>
-  searchArchive().catch((error) => toast(error.message, true)),
-);
-$("#archive-search-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  searchArchive().catch((error) => toast(error.message, true));
-});
-for (const selector of ["#archive-search", "#archive-handle", "#archive-list"])
-  $(selector).addEventListener("input", () => {
-    clearTimeout(archiveSearchTimeout);
-    archiveSearchTimeout = setTimeout(
-      () => searchArchive().catch((error) => toast(error.message, true)),
-      300,
-    );
-  });
-$("#archive-refresh").addEventListener("click", () =>
-  busy($("#archive-refresh"), () => fetchArchive()),
-);
-for (const [selector, direction] of [["#archive-previous", -1], ["#archive-next", 1]])
-  $(selector).addEventListener("click", () => {
-    if ($(selector).disabled) return;
-    fetchArchive({ offset: Math.max(0, state.observationOffset + direction * state.observationLimit) })
-      .catch((error) => toast(error.message, true));
-  });
 $("#policy-form").addEventListener("submit", savePolicy);
 $("#policy-form").addEventListener("input", () => {
   updatePolicyRecipientMode();
