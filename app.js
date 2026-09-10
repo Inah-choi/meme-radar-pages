@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=0191eb4b5bd74a6b7410';
-import {createBangerRadar} from './banger-radar.mjs?v=0191eb4b5bd74a6b7410';
-import {createMyTokens} from './my-tokens.mjs?v=0191eb4b5bd74a6b7410';
-import {API_ORIGIN} from './deployment-config.mjs?v=0191eb4b5bd74a6b7410';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=0191eb4b5bd74a6b7410';
+import {createRadarReview} from './radar-review.mjs?v=437f03cef6d98653164d';
+import {createBangerRadar} from './banger-radar.mjs?v=437f03cef6d98653164d';
+import {createMyTokens} from './my-tokens.mjs?v=437f03cef6d98653164d';
+import {API_ORIGIN} from './deployment-config.mjs?v=437f03cef6d98653164d';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=437f03cef6d98653164d';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -1026,7 +1026,7 @@ function renderFlashLane() {
   error.textContent = state.flashLaneError ? `플래시 레인 상태 갱신 실패: ${state.flashLaneError} 마지막으로 받은 상태를 표시합니다.` : '';
   const rows = clear('#flash-lane-rows'), requests = list(lane.requests).slice(0, 50);
   for (const request of requests) {
-    const data = request.data || {}, summary = request.summary || {}, stateLabel = FLASH_STATES[request.state] || display(request.state);
+    const data = request.data || {}, summary = request.summary || {}, stateLabel = data.execution === 'paper' && request.state === 'launched' ? '모의 발행 완료' : FLASH_STATES[request.state] || display(request.state);
     const labelCell = append(node('td'), node('strong', '', String(request.label || request.key || '—').slice(0, 80)));
     if (data.naming?.symbol) labelCell.append(node('div', 'muted', `$${String(data.naming.symbol).slice(0, 16)}`));
     const pairText = data.pair?.symbol ? String(data.pair.symbol).slice(0, 16) : 'ETH', toBroadcast = summary.toBroadcastMs;
@@ -1063,7 +1063,11 @@ function flashCodeList(codes) {
   return items;
 }
 function renderFlashPreview() {
-  const block = clear('#flash-preview-block'), preview = state.flashPreview;
+  const block = $('#flash-preview-block'), preview = state.flashPreview;
+  // Status polling must not restart an in-flight image download for the same prepared result.
+  if (block.renderedPreview === preview) return;
+  block.renderedPreview = preview;
+  clear(block);
   block.hidden = !preview;
   if (!preview) return;
   const holds = list(preview.holds).map(String);
@@ -1102,7 +1106,7 @@ function renderFlashResult() {
   const request = result.request || {}, launch = result.launch, summary = request.summary || {}, held = ['held', 'failed'].includes(request.state);
   block.className = `flash-result${held ? ' denied' : ''}`;
   block.append(node('h4', '', `발행 요청 ${short(request.id)}${result.replayed ? ' · 같은 키의 이전 요청 재사용' : ''}`));
-  block.append(node('p', '', `상태 ${FLASH_STATES[request.state] || display(request.state)}${request.heldCode ? ` · ${String(request.heldCode).slice(0, 40)}` : ''}${request.data?.reason ? ` · ${String(request.data.reason).slice(0, 200)}` : ''}`));
+  block.append(node('p', '', `상태 ${request.data?.execution === 'paper' && request.state === 'launched' ? '모의 발행 완료' : FLASH_STATES[request.state] || display(request.state)}${request.heldCode ? ` · ${String(request.heldCode).slice(0, 40)}` : ''}${request.data?.reason ? ` · ${String(request.data.reason).slice(0, 200)}` : ''}`));
   if (list(request.data?.reasons).length) block.append(flashCodeList(request.data.reasons));
   block.append(node('p', '', `접수→전송 ${finite(summary.toBroadcastMs) ? `${number(summary.toBroadcastMs)} ms${summary.withinTarget ? ' · 목표 이내' : ' · 목표 초과'}` : '전송 없음'}${finite(summary.toMinedMs) ? ` · 채굴까지 ${number(summary.toMinedMs)} ms` : ''}${finite(summary.sincePostMs) ? ` · 게시 후 ${(number(summary.sincePostMs) / 1000).toFixed(1)}초` : ''}`));
   if (launch && typeof launch === 'object') {
