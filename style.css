@@ -1911,24 +1911,60 @@ tr:last-child td {
   grid-column: 1/-1;
 }
 .draft-preview {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 15px;
   background: #132027;
   border-radius: 8px;
   padding: 13px;
   margin: 17px 0;
 }
+.draft-preview.has-image {
+  grid-template-columns: 80px minmax(0, 1fr);
+}
 .draft-preview img {
-  width: 65px;
-  height: 65px;
+  width: 80px;
+  height: 80px;
   object-fit: contain;
   border-radius: 10px;
 }
 .draft-preview p {
+  margin: 0;
   font-size: 10px;
   color: var(--muted);
   line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.draft-artwork-content {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.draft-artwork-content > .button {
+  justify-self: start;
+}
+.draft-artwork-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+}
+.draft-preview .wallet-error {
+  color: var(--danger);
+}
+.draft-artwork-prompt {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.draft-artwork-prompt summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.draft-artwork-prompt p {
+  margin-top: 8px;
 }
 .draft-actions {
   display: flex;

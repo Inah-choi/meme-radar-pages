@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=284479b6ab19a0fba70d';
-import {createBangerRadar} from './banger-radar.mjs?v=284479b6ab19a0fba70d';
-import {createMyTokens} from './my-tokens.mjs?v=284479b6ab19a0fba70d';
-import {API_ORIGIN} from './deployment-config.mjs?v=284479b6ab19a0fba70d';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=284479b6ab19a0fba70d';
+import {createRadarReview} from './radar-review.mjs?v=5dc7bf616acd5cde7601';
+import {createBangerRadar} from './banger-radar.mjs?v=5dc7bf616acd5cde7601';
+import {createMyTokens} from './my-tokens.mjs?v=5dc7bf616acd5cde7601';
+import {API_ORIGIN} from './deployment-config.mjs?v=5dc7bf616acd5cde7601';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=5dc7bf616acd5cde7601';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -3406,9 +3406,30 @@ function manualExecutionNotice() {
 }
 async function requestManualLaunch(saved, key) {
   const form=$('#draft-form'),selected=state.selected,sessionKey=state.key,detailRequest=state.detailRequest,revision=state.draftRevision||0;
-  const retryUntil=Date.now()+150000,signal=AbortSignal.timeout(180000);
   const current=()=>Boolean(sessionKey)&&state.key===sessionKey&&state.draft?.id===saved.id&&state.selected===selected&&state.detailRequest===detailRequest&&$('#draft-form')===form&&$('#candidate-dialog')?.open&&(state.draftRevision||0)===revision;
   const checkCurrent=()=>{if(!current()){const error=new Error('Stopped waiting because the draft or session changed. No further automatic launch request will be sent.');error.code='MANUAL_LAUNCH_WAIT_CANCELLED';throw error;}};
+  // Keep generation outside the launch HTTP request: Codex can take several minutes.
+  // Each poll is short, and the original launch intent is checked again before any launch request.
+  if((saved.image?.status&&saved.image.status!=='ready')||(!saved.image?.status&&state.overview?.image?.enabled)){
+    checkCurrent();
+    const queued=await api(`/api/token-drafts/${encodeURIComponent(saved.id)}/image`,{method:'POST',body:{force:false},signal:AbortSignal.timeout(30000)});
+    checkCurrent();
+    const imageUntil=Date.now()+660000;
+    let prepared=queued.draft;
+    for(;;){
+      checkCurrent();
+      if(prepared?.id===saved.id){state.draft=prepared;replaceDraftArtwork();}
+      if(prepared?.image?.status==='ready')break;
+      if(prepared?.image?.status==='error'){
+        const error=new Error(`Image preparation failed: ${prepared.image.error||'unknown error'}`);error.code='IMAGE_PREPARATION_FAILED';throw error;
+      }
+      if(Date.now()>=imageUntil){const error=new Error('Image preparation is still running. The image will update automatically; request launch again after it is ready.');error.code='IMAGE_PENDING';throw error;}
+      await new Promise(resolve=>setTimeout(resolve,Math.min(2000,imageUntil-Date.now())));
+      checkCurrent();
+      prepared=await api(`/api/token-drafts/${encodeURIComponent(saved.id)}`,{signal:AbortSignal.timeout(30000)});
+    }
+  }
+  const retryUntil=Date.now()+150000,signal=AbortSignal.timeout(180000);
   for(;;){
     checkCurrent();
     try{return await api('/api/launches',{method:'POST',headers:{'Idempotency-Key':key},body:{draftId:saved.id,execution:'manual'},signal});}
@@ -3424,27 +3445,36 @@ async function requestManualLaunch(saved, key) {
 function draftArtwork(draft) {
   const preview=node('div','draft-preview');preview.id='draft-artwork';
   const imageUrl=validUrl(draft.imageUrl),generated=draft.image||null,isSource=generated?.provider==='source',pons=state.overview?.network?.launchProtocol==='pons-v2';
-  if(imageUrl){const image=node('img');image.alt=`${draft.name} token image preview`;image.loading='lazy';image.src=`${imageUrl}${imageUrl.includes('?')?'&':'?'}v=${encodeURIComponent(draft.updatedAt||draft.id)}`;image.addEventListener('error',()=>image.remove(),{once:true});preview.append(image);}
+  if(imageUrl){preview.className+=' has-image';const image=node('img');image.alt=`${draft.name} token image preview`;image.loading='lazy';image.src=`${imageUrl}${imageUrl.includes('?')?'&':'?'}v=${encodeURIComponent(draft.updatedAt||draft.id)}`;image.addEventListener('error',()=>{image.remove();preview.className='draft-preview';},{once:true});preview.append(image);}
+  const content=node('div','draft-artwork-content');preview.append(content);
   const imageState=!generated?.status?pons?'Pons V2 requires a public image URL. Prepare an image before requesting launch.':'The token image is prepared automatically from the draft. The original geometric image is used until artwork is available.':generated.status==='ready'?
     `${isSource?'Captured source image':'Generated image'}${generated.provider?` · ${generated.provider}`:''}${generated.host?` · ${generated.host}`:''}${generated.metadataImage?' · Image included in token metadata.':pons?' · No public image URL; Pons V2 cannot use the local geometric preview.':' · No public image URL; metadata uses the geometric image.'}`:
     generated.status==='error'?`Image preparation failed: ${generated.error||'unknown error'}.`:
     `Image preparation ${generated.status==='queued'?'queued':'in progress'}. Preview and metadata update automatically.`;
-  append(preview,node('p',generated?.status==='error'?'wallet-error':'',imageState));
-  if(pons)preview.append(node('p','chart-help','Pons V2 requires a publicly accessible image URL; a local preview alone is insufficient. The server checks the URL before launch.'));
-  if(isSource&&generated.sourceUrl)preview.append(externalLink('Source image ↗',generated.sourceUrl));
-  if(isSource&&generated.sourcePostUrl)preview.append(externalLink('Source post ↗',generated.sourcePostUrl));
+  const status=node('p',generated?.status==='error'?'wallet-error':'',imageState);status.setAttribute('role','status');content.append(status);
+  if(['queued','generating'].includes(generated?.status)&&state.overview?.image?.fallbackProvider==='codex')content.append(node('p','chart-help','The source image is checked first. If none is usable, Codex generates artwork; this can take several minutes.'));
+  if(pons&&!/^(?:https:\/\/|ipfs:\/\/)/.test(generated?.metadataImage||''))content.append(node('p','chart-help','Pons V2 requires a publicly accessible image URL before launch.'));
+  if(isSource&&(generated.sourceUrl||generated.sourcePostUrl)){
+    const links=node('div','draft-artwork-links');
+    if(generated.sourceUrl)links.append(externalLink('Source image ↗',generated.sourceUrl));
+    if(generated.sourcePostUrl)links.append(externalLink('Source post ↗',generated.sourcePostUrl));
+    content.append(links);
+  }
   const imageActionLabel=isSource?'Refresh source image':generated?.status==='ready'?'Regenerate image':'Prepare image';
   const regenerate=actionButton(imageActionLabel,async()=>{
     const saved=await saveDraft();
     regenerate.textContent='Preparing image…';
     let result;
-    try { result=await api(`/api/token-drafts/${encodeURIComponent(saved.id)}/image`,{method:'POST',body:{force:saved.image?.status==='ready'},signal:AbortSignal.timeout(180000)}); }
+    try { result=await api(`/api/token-drafts/${encodeURIComponent(saved.id)}/image`,{method:'POST',body:{force:saved.image?.status==='ready'},signal:AbortSignal.timeout(30000)}); }
     finally { regenerate.textContent=imageActionLabel; }
     if(state.draft?.id!==saved.id)return;
     state.draft=result.draft;state.draftStatusError='';
     if(!state.draftDirty)renderDraft();else replaceDraftArtwork();
-  },'button subtle');preview.append(regenerate);
-  if(draft.imagePrompt&&!isSource)append(preview,node('p','chart-help',`Image prompt: ${draft.imagePrompt}`),node('p','chart-help',generated?.status==='ready'?'The preview was generated from this prompt.':'Generated artwork uses this English prompt.'));
+  },'button subtle');content.append(regenerate);
+  if(draft.imagePrompt&&!isSource){
+    const prompt=node('details','draft-artwork-prompt');
+    append(prompt,node('summary','','Image prompt'),node('p','chart-help',draft.imagePrompt));preview.append(prompt);
+  }
   return preview;
 }
 function replaceDraftArtwork() {
