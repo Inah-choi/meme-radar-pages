@@ -1,6 +1,6 @@
 // 뱅어 레이더 · GET /api/radar/bangers 를 읽어 레인별 카드로 표시합니다.
 // 점수는 관측된 주목도이며 수익 확률이 아닙니다. 원천이 주지 않은 값(null)은 표시하지 않습니다.
-import {createNextBangers} from './next-bangers.mjs?v=b073c021290d1f359800';
+import {createNextBangers} from './next-bangers.mjs?v=109f72627f316a97d913';
 const rows=value=>Array.isArray(value)?value:[];
 const finite=value=>typeof value==='number'&&Number.isFinite(value);
 const text=value=>typeof value==='string'&&value.trim()?value.trim():null;

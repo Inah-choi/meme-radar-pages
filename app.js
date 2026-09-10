@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=b073c021290d1f359800';
-import {createBangerRadar} from './banger-radar.mjs?v=b073c021290d1f359800';
-import {createMyTokens} from './my-tokens.mjs?v=b073c021290d1f359800';
-import {API_ORIGIN} from './deployment-config.mjs?v=b073c021290d1f359800';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=b073c021290d1f359800';
+import {createRadarReview} from './radar-review.mjs?v=109f72627f316a97d913';
+import {createBangerRadar} from './banger-radar.mjs?v=109f72627f316a97d913';
+import {createMyTokens} from './my-tokens.mjs?v=109f72627f316a97d913';
+import {API_ORIGIN} from './deployment-config.mjs?v=109f72627f316a97d913';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=109f72627f316a97d913';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -838,8 +838,8 @@ function renderOverview() {
 /* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 핫 레인 페이지에서만 GET /api/hot-lane을 읽는다. */
 const HOT_LANE_STATES = { primed: '관찰 중', armed: '발행 검토', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
 const HOT_QUALITY_LABELS = { candidate: '뱅어 후보', watch: '관찰', crowded: '중복 과밀', insufficient: '근거 부족' };
-const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문' };
-const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음' };
+const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문', D: 'D · 실측 반응 증가' };
+const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
 const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
 let hotLaneFetchSequence = 0;
 function hotLaneBucket(signal) {
@@ -866,6 +866,43 @@ function hotLaneLink(label, url, xPost = false) {
   return link;
 }
 function hotLaneCount(value) { return finite(value) ? `${Math.max(0, Math.trunc(Number(value)))}개` : '미확인'; }
+function hotLaneSourceWindow(quality) { return Number(quality?.sourceWindowHours) === 6 ? 6 : 1; }
+function hotLaneMetric(value, unit = '') { return finite(value) && Number(value) >= 0 ? `${Number(value).toLocaleString('ko-KR')}${unit}` : '미확인'; }
+function hotLaneAttention(quality) {
+  const attention = quality.attention, section = append(node('section', 'hot-attention'), node('h4', '', '실제로 반응이 늘고 있나요?'));
+  if (!attention) { section.append(node('p', 'muted', '실측 반응 확인 대기 · 조회수 한 번의 관측만으로는 증가 속도를 판단하지 않습니다.')); return section; }
+  const measured = attention.eligible === true && attention.mode === 'measured_velocity', independent = attention.eligible === true && attention.mode === 'independent_spread';
+  section.append(node('p', measured || independent ? 'hot-attention-verdict' : 'hot-gate-reasons', measured ? '실측 증가 확인' : independent ? '독립 원문 확산 확인' : '반응 증가 미확인'));
+  const metrics = node('div', 'hot-attention-metrics');
+  for (const [label, value, unit] of [['원문 최대 조회', attention.maxViews, '회'], ['원문 최대 좋아요', attention.maxLikes, '개'], ['원문 리포스트 합계', attention.totalReposts, '회']]) metrics.append(append(node('div'), node('span', 'muted', label), node('strong', '', hotLaneMetric(value, unit))));
+  section.append(metrics);
+  const hasInterval = finite(attention.windowMinutes) && Number(attention.windowMinutes) > 0 && (finite(attention.viewsDelta) || finite(attention.engagementDelta));
+  if (hasInterval) section.append(node('p', 'hot-attention-growth', `비교 간격 ${hotLaneMetric(attention.windowMinutes, '분')} · 조회 증가 ${finite(attention.viewsDelta) ? `+${hotLaneMetric(attention.viewsDelta, '회')}` : '미측정'} · 반응 증가 ${finite(attention.engagementDelta) ? `+${hotLaneMetric(attention.engagementDelta, '개')}` : '미측정'}`));
+  else section.append(node('p', 'muted', '증가량 미측정 · 비교 가능한 두 관측값이 없습니다. 단일 조회수만으로는 통과하지 않습니다.'));
+  if (independent) section.append(node('p', '', `서로 다른 작성자 ${hotLaneMetric(attention.authorCount, '명')}의 원문 반응을 확인했습니다. 계정의 진위까지 확인한 것은 아닙니다.`));
+  section.append(node('p', 'muted', `최대 6시간 이내 원문 · 20분 이내 실측 관측 기준${attention.latestObservedAt ? ` · 마지막 관측 ${date(attention.latestObservedAt)}` : ' · 유효 관측 시각 미확인'}`));
+  section.append(node('p', 'muted', '조회·좋아요·리포스트는 X에서 관측한 반응이며, 토큰 거래량이나 매수 수요를 뜻하지 않습니다.'));
+  return section;
+}
+function hotLaneEditorial(quality) {
+  const review = quality.editorial, section = append(node('section', 'hot-editorial'), node('h4', '', 'AI가 찾은 웃음 포인트'));
+  if (!review) { section.append(node('p', 'hot-gate-reasons', 'AI 소재 검토 대기')); section.append(node('p', 'muted', '실측 반응이 확인된 소재부터 웃음 포인트·새로움·이미지 구도를 검토합니다.')); return section; }
+  const labels = { pass: 'AI 소재 검토 통과', watch: 'AI 검토 · 추가 관찰', reject: 'AI 검토 · 제외' };
+  section.append(node('p', review.verdict === 'pass' ? 'hot-editorial-verdict' : 'hot-gate-reasons', labels[review.verdict] || 'AI 소재 검토 상태 미확인'));
+  if (review.topic?.label) section.append(node('p', 'hot-editorial-topic', String(review.topic.label).slice(0, 120)));
+  if (review.angle) section.append(append(node('p'), node('strong', '', '웃음 포인트 · '), node('span', '', String(review.angle).slice(0, 500))));
+  if (review.whyNow) section.append(append(node('p'), node('strong', '', '왜 지금 · '), node('span', '', String(review.whyNow).slice(0, 600))));
+  if (review.summary) section.append(node('p', '', String(review.summary).slice(0, 800)));
+  const scores = node('div', 'hot-editorial-scores');
+  for (const [key, label] of [['memeClarity', '웃음 명확성'], ['distinctiveness', '차별성'], ['visualHook', '이미지 구도'], ['culturalFit', '문화적 맥락']]) {
+    const value = review.scores?.[key], known = finite(value) && Number(value) >= 0 && Number(value) <= 5;
+    scores.append(append(node('div'), node('span', 'muted', label), node('strong', '', known ? `${value}/5` : '미확인')));
+  }
+  section.append(scores);
+  if (list(review.risks).length) { const risks = node('ul', 'hot-editorial-risks'); for (const risk of list(review.risks).slice(0, 4)) risks.append(node('li', '', String(risk).slice(0, 400))); section.append(risks); }
+  section.append(node('p', 'muted', `AI 편집 점수이며 예상 거래량이 아닙니다.${review.reviewedAt ? ` 검토 ${date(review.reviewedAt)}` : ''}${review.expiresAt ? ` · 재검토 기준 ${date(review.expiresAt)}` : ''}`));
+  return section;
+}
 function hotLaneEvidence(signal, bucket) {
   const quality = signal.quality || {}, duplicates = quality.duplicates || {}, key = String(signal.key || signal.label || '');
   const detail = node('details', 'hot-evidence');
@@ -879,6 +916,7 @@ function hotLaneEvidence(signal, bucket) {
   const summary = node('summary', '', `산출 근거 · X 원문 ${evidence.length}건${competitors.length ? ` · 비교 토큰 ${competitors.length}개` : ''}`);
   const body = node('div', 'hot-evidence-body');
   append(detail, summary, body);
+  append(body, hotLaneEditorial(quality), hotLaneAttention(quality));
   const assessment = node('div', 'hot-evidence-assessment');
   for (const [title, values, style] of [['확인된 강점', quality.strengths, 'strength'], ['검토할 점', quality.cautions, 'caution']]) {
     if (!list(values).length) continue;
@@ -893,7 +931,7 @@ function hotLaneEvidence(signal, bucket) {
   const signals = append(node('section', 'hot-evidence-signals'), node('h4', '', '어떤 신호가 겹쳤나요?'));
   for (const kind of classes) {
     const description = !currentClasses.includes(kind) ? (Array.isArray(quality.currentClasses) ? '이전에 포착한 신호입니다. 현재 유효 신호에 포함하지 않습니다.' : '이전에 포착한 신호이며 현재 유효 여부는 미확인입니다.') : kind === 'A' ? `비슷한 소재의 토큰 ${display(signal.echoTokens, 0)}개가 ${display(signal.echoVenues, 0)}곳에서 발행됐습니다. 매수 수요를 뜻하지 않으며, 중복 경쟁일 수 있습니다.`
-      : kind === 'B' ? '서로 다른 작성자의 최근 X 원문이 증가했습니다.' : kind === 'C' ? '설정된 주요 계정의 최근 X 원문에서 포착했습니다.' : String(kind);
+      : kind === 'B' ? '서로 다른 작성자의 최근 X 원문이 증가했습니다.' : kind === 'C' ? '설정된 주요 계정의 최근 X 원문에서 포착했습니다.' : kind === 'D' ? '최대 6시간 이내 원문의 최근 실측 증가 또는 독립 작성자의 반응 확산을 확인했습니다. 토큰 거래량을 측정한 신호는 아닙니다.' : String(kind);
     signals.append(append(node('p'), node('strong', '', HOT_SIGNAL_LABELS[kind] || String(kind)), node('span', '', ` — ${description}`)));
   }
   if (!currentClasses.length) signals.append(node('p', 'muted', '현재 유효한 교차 신호가 확인되지 않았습니다.'));
@@ -904,8 +942,27 @@ function hotLaneEvidence(signal, bucket) {
   for (const post of evidence.slice(0, 8)) {
     const author = String(post.author || '작성자 미확인').slice(0, 100), item = node('article', 'hot-source-item');
     const meta = append(node('div', 'hot-source-meta'), node('strong', '', author), node('span', 'muted', date(post.publishedAt)));
-    meta.append(node('span', `hot-source-freshness${post.fresh === true ? ' fresh' : ''}`, post.contextOnly === true ? '맥락 확인용 · 점수 미반영' : post.fresh === true ? '최근 1시간 유효 원문' : post.fresh === false ? '이전 원문 · 맥락 확인용' : '유효 시간 미확인'));
-    append(item, meta, node('p', 'hot-source-text', String(post.text || '수집된 본문 없음').slice(0, 1000)), hotLaneLink('X 원문 보기 ↗', post.url, true));
+    if (post.role === 'commentary') meta.append(node('span', 'hot-source-freshness fresh', '직접 작성한 인용 반응'));
+    meta.append(node('span', `hot-source-freshness${post.fresh === true ? ' fresh' : ''}`, post.contextOnly === true ? '맥락 확인용 · 점수 미반영' : post.fresh === true ? `현재 평가 근거 · 최대 ${hotLaneSourceWindow(quality)}시간` : post.fresh === false ? '이전 원문 · 맥락 확인용' : '유효 시간 미확인'));
+    if (list(quality.editorial?.sourceIds).includes(post.id)) meta.append(node('span', 'hot-source-freshness fresh', 'AI 인용 원문'));
+    append(item, meta, node('p', 'hot-source-text', String(post.text || '수집된 본문 없음').slice(0, 1000)));
+    const observed = list(quality.attention?.posts).find(value => value.id === post.id);
+    if (observed) {
+      item.append(node('p', 'hot-source-metrics', `조회 ${hotLaneMetric(observed.views, '회')} · 좋아요 ${hotLaneMetric(observed.likes, '개')} · 리포스트 ${hotLaneMetric(observed.reposts, '회')}`));
+      if (finite(observed.deltaMinutes) && Number(observed.deltaMinutes) > 0 && (finite(observed.viewsDelta) || finite(observed.engagementDelta))) item.append(node('p', 'hot-source-metrics', `${hotLaneMetric(observed.deltaMinutes, '분')} 동안 조회 ${finite(observed.viewsDelta) ? `+${hotLaneMetric(observed.viewsDelta)}` : '증가 미측정'} · 반응 ${finite(observed.engagementDelta) ? `+${hotLaneMetric(observed.engagementDelta)}` : '증가 미측정'}`));
+      else item.append(node('p', 'hot-source-metrics', '증가량 미측정'));
+      if (observed.observedAt) item.append(node('p', 'hot-source-metrics', `실측 관측 ${date(observed.observedAt)}`));
+    }
+    item.append(hotLaneLink('X 원문 보기 ↗', post.url, true));
+    if (post.context || (post.role === 'commentary' && post.quotedPostUrl)) {
+      const parent = post.context || {}, context = append(node('aside', 'hot-quoted-context'), node('h4', '', '인용 원글 · 맥락 확인용'));
+      context.append(node('p', 'muted', '이 원글은 별도의 확산 근거로 합산하지 않습니다.'));
+      if (parent.author || parent.publishedAt) context.append(node('p', 'hot-source-metrics', `${display(parent.author, '작성자 미확인')} · ${date(parent.publishedAt)}`));
+      context.append(node('p', 'hot-source-text', String(parent.text || '원글 본문을 아직 수집하지 못했습니다.').slice(0, 1000)));
+      const parentUrl = hotLanePublicUrl(parent.url || post.quotedPostUrl, true);
+      if (parentUrl) context.append(hotLaneLink('인용 원글 보기 ↗', parentUrl, true));
+      item.append(context);
+    }
     posts.append(item);
   }
   if (evidence.length > 8) posts.append(node('p', 'muted', `수집된 원문 ${evidence.length}건 중 최근 8건 표시`));
@@ -940,8 +997,8 @@ function hotLaneCard(signal) {
   related.title = '최근 7일 수집된 관련 이름·티커의 토큰 수. 전체 시장 수량은 아닙니다.';
   related.setAttribute('aria-label', `최근 7일 관련 토큰 ${related.textContent}`);
   const sources = node('span', 'hot-row-count', finite(quality.sourceCount) ? `${quality.sourceCount}건` : '미확인');
-  sources.title = '최근 1시간 유효 X 원문 수';
-  sources.setAttribute('aria-label', `최근 1시간 유효 X 원문 ${sources.textContent}`);
+  sources.title = `현재 평가에 유효한 X 원문 수 · 최대 ${hotLaneSourceWindow(quality)}시간`;
+  sources.setAttribute('aria-label', `유효 X 원문 ${sources.textContent}`);
   const stateLabel = HOT_LANE_STATES[signal.state] || display(signal.state);
   const status = node('span', 'hot-row-state', stateLabel);
   const toggle = node('span', 'hot-row-toggle', '자세히');
@@ -959,7 +1016,7 @@ function hotLaneCard(signal) {
   for (const [label, value] of [['같은 이름 · 7일', duplicates.nameCount7d], ['같은 티커 · 7일', duplicates.tickerCount7d], ['관련 이름·티커 · 7일', duplicates.topicCount7d]]) metrics.append(append(node('div'), node('span', 'muted', label), node('strong', '', hotLaneCount(value))));
   context.append(metrics);
   if (duplicates.nameBasis || duplicates.tickerBasis) context.append(node('p', 'hot-duplicate-basis', `집계 기준 · 이름: ${display(duplicates.nameBasis, '미확인')} · 티커: ${finite(duplicates.tickerCount7d) ? display(duplicates.tickerBasis, '미확인') : '아직 확인되지 않음'}`));
-  context.append(node('p', 'hot-source-counts', `최근 1시간 유효 원문 ${finite(quality.sourceCount) ? `${quality.sourceCount}건` : '미확인'} · 작성자 ${finite(quality.authorCount) ? `${quality.authorCount}명` : '미확인'}${quality.latestSourceAt ? ` · 최근 원문 ${ago(quality.latestSourceAt)}` : ''}`));
+  context.append(node('p', 'hot-source-counts', `최근 ${hotLaneSourceWindow(quality)}시간 유효 원문 ${finite(quality.sourceCount) ? `${quality.sourceCount}건` : '미확인'} · 작성자 ${finite(quality.authorCount) ? `${quality.authorCount}명` : '미확인'}${quality.latestSourceAt ? ` · 최근 원문 ${ago(quality.latestSourceAt)}` : ''}`));
   const classes = node('div', 'hot-signal-chips');
   for (const kind of list(quality.currentClasses)) classes.append(node('span', '', HOT_SIGNAL_LABELS[kind] || String(kind)));
   if (!list(quality.currentClasses).length) classes.append(node('span', '', Array.isArray(quality.currentClasses) ? '현재 유효 신호 없음' : '현재 신호 미확인'));
@@ -1003,6 +1060,7 @@ function renderHotLane() {
   if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
+  if (lane.screening) parts.push(`${lane.screening.running ? 'AI 소재 검토 중' : 'AI 소재 검토'} · 최근 1시간 ${display(lane.screening.usedThisHour, '미확인')}/${display(lane.screening.maxPerHour, '미확인')}건`);
   $('#hot-lane-summary').textContent = parts.join(' · ');
   const readiness = $('#hot-lane-readiness'), policy = state.overview?.policy || {};
   const blockers = [];
