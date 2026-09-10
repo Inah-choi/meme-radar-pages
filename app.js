@@ -1,8 +1,8 @@
-import {createRadarReview} from './radar-review.mjs?v=109f72627f316a97d913';
-import {createBangerRadar} from './banger-radar.mjs?v=109f72627f316a97d913';
-import {createMyTokens} from './my-tokens.mjs?v=109f72627f316a97d913';
-import {API_ORIGIN} from './deployment-config.mjs?v=109f72627f316a97d913';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=109f72627f316a97d913';
+import {createRadarReview} from './radar-review.mjs?v=284479b6ab19a0fba70d';
+import {createBangerRadar} from './banger-radar.mjs?v=284479b6ab19a0fba70d';
+import {createMyTokens} from './my-tokens.mjs?v=284479b6ab19a0fba70d';
+import {API_ORIGIN} from './deployment-config.mjs?v=284479b6ab19a0fba70d';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=284479b6ab19a0fba70d';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -842,6 +842,20 @@ const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자
 const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
 const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
 let hotLaneFetchSequence = 0;
+function hotLaneSourceSignal(signal) { return /^source[0-9a-f]{24}$/i.test(String(signal.key || '')); }
+function hotLaneHasLaunchHistory(signal) { return Boolean(signal.draftId || signal.launchedLaunchId || ['launching', 'launched'].includes(signal.state)); }
+function hotLaneReviewedTitle(signal) {
+  const label = signal.quality?.editorial?.topic?.label;
+  return typeof label === 'string' ? label.trim().slice(0, 60) : '';
+}
+function hotLaneVisible(signal) {
+  if (!hotLaneSourceSignal(signal) || hotLaneHasLaunchHistory(signal)) return true;
+  return signal.quality?.eligible === true && signal.quality?.editorial?.verdict === 'pass' && Boolean(hotLaneReviewedTitle(signal));
+}
+function hotLaneTitle(signal) {
+  if (!hotLaneSourceSignal(signal)) return String(signal.label || signal.key || '—').slice(0, 100);
+  return hotLaneReviewedTitle(signal) || (signal.state === 'launched' ? '발행 기록' : '준비된 발행 기록');
+}
 function hotLaneBucket(signal) {
   const quality = signal.quality;
   if (quality?.tier === 'crowded' || quality?.duplicates?.level === 'high') return 'crowded';
@@ -988,7 +1002,7 @@ function hotLaneCard(signal) {
   const row = hotLaneEvidence(signal, bucket), summary = row.children[0], body = row.children[1];
   row.className = `hot-evidence hot-quality-row hot-quality-${bucket}`;
   summary.className = 'hot-row-summary'; summary.replaceChildren();
-  const identity = node('h3', 'hot-row-name', String(signal.label || signal.key || '—').slice(0, 100));
+  const identity = node('h3', 'hot-row-name', hotLaneTitle(signal));
   identity.title = identity.textContent;
   const grade = node('span', 'hot-row-grade');
   grade.append(node('span', `hot-quality-badge ${bucket}`, HOT_QUALITY_LABELS[bucket]));
@@ -1006,7 +1020,7 @@ function hotLaneCard(signal) {
   const context = node('section', 'hot-row-context');
   const detailTitle = `산출 근거 · X 원문 ${list(signal.evidence).length}건${list(signal.competitors).length ? ` · 비교 토큰 ${list(signal.competitors).length}개` : ''}`;
   context.append(node('h4', '', detailTitle));
-  if (signal.label && signal.key && signal.label !== signal.key) context.append(node('p', 'muted', `소재 키: ${String(signal.key).slice(0, 100)}`));
+  if (!hotLaneSourceSignal(signal) && signal.label && signal.key && signal.label !== signal.key) context.append(node('p', 'muted', `소재 키: ${String(signal.key).slice(0, 100)}`));
   context.append(node('p', 'muted', `상태: ${stateLabel} · ${date(signal.armedAt || signal.updatedAt || signal.primedAt)}`));
   const reason = HOT_HOLD_REASONS[signal.heldCode] || (signal.state === 'primed' ? `교차 확인 대기 · ${Array.isArray(quality.currentClasses) ? '현재 유효 신호' : '이전에 포착한 신호'} ${Array.isArray(quality.currentClasses) ? list(quality.currentClasses).length : list(signal.classes).length}종류` : signal.heldCode ? '발행 조건 확인 필요' : '');
   if (reason) context.append(node('p', 'lane-signal-reason', reason));
@@ -1082,7 +1096,8 @@ function renderHotLane() {
   for (const [key, detail] of hotLaneEvidenceViews) { if (detail.open) hotLaneOpenEvidence.add(key); else hotLaneOpenEvidence.delete(key); }
   hotLaneEvidenceViews.clear();
   while (hotLaneOpenEvidence.size > 256) hotLaneOpenEvidence.delete(hotLaneOpenEvidence.values().next().value);
-  const all = list(lane.signals);
+  const received = list(lane.signals), all = received.filter(hotLaneVisible);
+  const trustedTotals = all.length === received.length;
   const search = $('#hot-lane-search'), queryInput = $('#hot-lane-query');
   if (!search.hotLaneBound) {
     search.hotLaneBound = true; queryInput.value = state.hotLaneQuery || '';
@@ -1094,7 +1109,7 @@ function renderHotLane() {
   const filters = clear('#hot-lane-filters'), filter = state.hotLaneFilter || 'all';
   for (const [value, label] of [['all', '전체 · 추천순'], ['candidate', '뱅어 후보'], ['watch', '관찰·근거 부족'], ['crowded', '중복 과밀']]) {
     const totals = lane.totalByTier, observedCount = value === 'all' ? lane.totalSignals : value === 'watch' && totals ? Number(totals.watch || 0) + Number(totals.insufficient || 0) : totals?.[value];
-    const count = finite(observedCount) ? observedCount : value === 'all' ? all.length : all.filter(signal => value === 'watch' ? ['watch', 'insufficient'].includes(hotLaneBucket(signal)) : hotLaneBucket(signal) === value).length;
+    const count = trustedTotals && finite(observedCount) ? observedCount : value === 'all' ? all.length : all.filter(signal => value === 'watch' ? ['watch', 'insufficient'].includes(hotLaneBucket(signal)) : hotLaneBucket(signal) === value).length;
     const button = node('button', `button small subtle${filter === value ? ' selected' : ''}`, `${label} ${count}`);
     button.type = 'button'; button.setAttribute('aria-pressed', filter === value ? 'true' : 'false');
     button.addEventListener('click', async () => { state.hotLaneFilter = value; await fetchHotLane(); });
@@ -1103,9 +1118,9 @@ function renderHotLane() {
   const matching = ranked.filter(signal => filter === 'all' || hotLaneInProgress(signal) || (filter === 'watch' ? ['watch', 'insufficient'].includes(hotLaneBucket(signal)) : hotLaneBucket(signal) === filter));
   const signals = matching.slice(0, 50), rows = clear('#hot-lane-rows');
   for (const signal of signals) rows.append(hotLaneCard(signal));
-  const candidateCount = finite(lane.totalByTier?.candidate) ? Number(lane.totalByTier.candidate) : all.filter(signal => hotLaneBucket(signal) === 'candidate').length;
-  const total = finite(lane.totalSignals) ? Number(lane.totalSignals) : all.length, matched = finite(lane.matchingSignals) ? Number(lane.matchingSignals) : matching.length;
-  $('#hot-lane-selection').textContent = `${candidateCount ? `전체 뱅어 후보 ${candidateCount}건` : '현재 뱅어 후보 조건을 통과한 소재가 없습니다.'} · 전체 ${total}건 · 검색·분류 ${matched}건 · ${signals.length}건 표시${matched > 50 ? ' (최대 50건)' : ''}${filter !== 'all' ? ' · 발행 검토·진행·완료 상태는 검색 범위에서 분류와 관계없이 표시합니다.' : ' · 발행 진행 상태를 먼저, 나머지는 후보 점수와 중복 정도순으로 표시합니다.'}`;
+  const candidateCount = trustedTotals && finite(lane.totalByTier?.candidate) ? Number(lane.totalByTier.candidate) : all.filter(signal => hotLaneBucket(signal) === 'candidate').length;
+  const total = trustedTotals && finite(lane.totalSignals) ? Number(lane.totalSignals) : all.length, matched = trustedTotals && finite(lane.matchingSignals) ? Number(lane.matchingSignals) : matching.length;
+  $('#hot-lane-selection').textContent = `${candidateCount ? `전체 뱅어 후보 ${candidateCount}건` : '현재 뱅어 후보 조건을 통과한 소재가 없습니다.'} · ${trustedTotals ? '전체' : '현재 응답에서 표시 가능'} ${total}건 · 검색·분류 ${matched}건 · ${signals.length}건 표시${matched > 50 ? ' (최대 50건)' : ''}${filter !== 'all' ? ' · 발행 검토·진행·완료 상태는 검색 범위에서 분류와 관계없이 표시합니다.' : ' · 발행 진행 상태를 먼저, 나머지는 후보 점수와 중복 정도순으로 표시합니다.'}`;
   $('#hot-lane-empty').hidden = signals.length > 0;
   $('#hot-lane-empty').textContent = total ? '검색·분류 조건에 해당하는 후보가 없습니다.' : '최근 24시간 동안 핫 레인 신호가 없습니다.';
   const admin = hotLaneAdmin(), pause = $('#hot-lane-pause'), resume = $('#hot-lane-resume');
