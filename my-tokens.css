@@ -43,3 +43,30 @@
 .my-tokens-empty { padding: 30px; text-align: center; }
 @media(max-width:1100px) { .my-tokens-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { #my-tokens-root .page-heading { align-items: flex-start; gap: 12px; flex-direction: column; } .my-tokens-stats { gap: 8px; } .my-tokens-stats .stat-card { padding: 14px; } .my-tokens-stats .stat-value { font-size: 19px; } }
+/* 보유 · 매도 column: launch-wallet holding line, inline sell panel and job status (same visual language as the claim cell). */
+.my-tokens-table { min-width: 1260px; }
+.my-token-sell-cell { min-width: 250px; max-width: 340px; font-size: 11px; line-height: 1.6; }
+.my-token-holding { overflow-wrap: anywhere; }
+.my-token-holding > strong { color: var(--lime,#c4f566); }
+.my-token-holding > a,.my-token-holding > .error-text { display: block; margin-top: 4px; }
+.my-token-holding-graduated { color: var(--muted,#91a0af); }
+.my-token-sell > small { display: block; margin-top: 6px; }
+.my-token-sell-action { margin: 6px 6px 0 0; min-height: 34px; font-size: 11px; white-space: normal; }
+.my-token-sell-action:disabled { opacity: .5; cursor: not-allowed; }
+.my-token-sell-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--line,#27333e); border-radius: 10px; background: var(--surface,#151e27); overflow-wrap: anywhere; }
+.my-token-sell-panel > strong { display: block; color: var(--lime,#c4f566); }
+.my-token-sell-panel > small,.my-token-sell-panel > a,.my-token-sell-panel > p { display: block; margin: 8px 0; }
+.my-token-sell-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 10px 0 4px; }
+.my-token-sell-field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted,#91a0af); }
+.my-token-sell-percent,.my-token-sell-slippage { width: 88px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line,#27333e); border-radius: 8px; background: var(--bg,#0f161d); color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
+.my-token-sell-review { margin-top: 10px; }
+.my-token-sell-review p { margin: 6px 0; }
+.my-token-sell-label { color: var(--muted,#91a0af); }
+.my-token-sell-clock { font-variant-numeric: tabular-nums; }
+.my-token-sell-job > strong,.my-token-sell-job > span,.my-token-sell-job > a { display: block; margin: 3px 0; }
+.my-tokens-sells { margin-top: 18px; }
+.my-tokens-sells-title { margin: 0 0 10px; font-size: 14px; letter-spacing: .03em; }
+.my-tokens-sells-table { min-width: 860px; }
+.my-tokens-sells-table td { padding: 12px 16px; }
+.my-tokens-sells-table td > small,.my-tokens-sells-table td > span,.my-tokens-sells-table td > a { display: block; margin-top: 3px; }
+.my-tokens-sells .my-tokens-empty { padding: 16px; }
