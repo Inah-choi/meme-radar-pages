@@ -72,7 +72,8 @@ export function createOriginBuy({ api, document = globalThis.document, toast = (
   add(actions, pauseButton, resumeButton);
   add(panelHead, actions);
   const settings = el('div', 'origin-buy-settings'); settings.id = 'origin-buy-settings';
-  add(panel, panelHead, settings);
+  const review = el('p', 'origin-buy-review muted'); review.id = 'origin-buy-review';
+  add(panel, panelHead, settings, review);
   const signalsBox = el('section', 'panel origin-buy-signals'); signalsBox.setAttribute('aria-label', '원본 매수 신호');
   const signalsTable = el('table', 'data-table origin-buy-table'); signalsTable.id = 'origin-buy-signals';
   const signalsHead = el('tr');
@@ -158,6 +159,8 @@ export function createOriginBuy({ api, document = globalThis.document, toast = (
     pauseButton.disabled = lane.canPause !== true || !lane.available || isPaused || loading;
     resumeButton.disabled = lane.canPause !== true || !lane.available || !isPaused || loading;
     drawSettings(lane);
+    const r = lane.review;
+    review.textContent = r ? `사후 검토 ${date(r.at)} · 최근 ${r.days}일 매수 ${r.buys}건: win ${r.verdicts?.win ?? 0} · flat ${r.verdicts?.flat ?? 0} · loss ${r.verdicts?.loss ?? 0} · dead ${r.verdicts?.dead ?? 0} · 보류로 놓친 것 ${r.missed ?? 0}건${list(r.issueCounts).length ? ` · 반복 문제: ${list(r.issueCounts).slice(0, 3).map(([issue, count]) => `${issue} ${count}건`).join(', ')}` : ''} (npm run origin:review)` : '사후 검토 기록이 아직 없습니다 (레인이 켜져 있으면 매시간 자동 기록, 또는 npm run origin:review).';
     const signals = list(lane.signals);
     signalsBody.replaceChildren(...signals.map(signalRow));
     signalsEmpty.hidden = signals.length > 0;
