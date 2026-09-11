@@ -1,9 +1,9 @@
-import {createRadarReview} from './radar-review.mjs?v=aeae51cf9ec777ff6258';
-import {createBangerRadar} from './banger-radar.mjs?v=aeae51cf9ec777ff6258';
-import {createMyTokens} from './my-tokens.mjs?v=aeae51cf9ec777ff6258';
-import {createOriginBuy} from './origin-buy.mjs?v=aeae51cf9ec777ff6258';
-import {API_ORIGIN} from './deployment-config.mjs?v=aeae51cf9ec777ff6258';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=aeae51cf9ec777ff6258';
+import {createRadarReview} from './radar-review.mjs?v=efc55832d61e8373f436';
+import {createBangerRadar} from './banger-radar.mjs?v=efc55832d61e8373f436';
+import {createMyTokens} from './my-tokens.mjs?v=efc55832d61e8373f436';
+import {createOriginBuy} from './origin-buy.mjs?v=efc55832d61e8373f436';
+import {API_ORIGIN} from './deployment-config.mjs?v=efc55832d61e8373f436';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=efc55832d61e8373f436';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),

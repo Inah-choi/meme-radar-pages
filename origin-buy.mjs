@@ -29,7 +29,7 @@ export const SIGNAL_STATES = Object.freeze({ detected: '감지됨', planned: '�
 export const BUY_STATES = Object.freeze({ paper: 'PAPER 기록', queued: '대기', prepared: '서명됨', submitted: '전송됨', uncertain: '확인 중', confirmed: '완료', failed: '실패' });
 export const ROUTES = Object.freeze({ 'pons-curve': 'Pons 커브', 'uniswap-v4-single': 'Uniswap V4 · ETH 페어', 'uniswap-v4-multi': 'Uniswap V4 · 2홉' });
 export const HOLD_LABELS = Object.freeze({
-  ORIGIN_BUY_TOO_LATE: 'FDV 상한 초과(이미 늦음)', ORIGIN_BUY_SCORE_BELOW_MIN: '점수 미달', ORIGIN_BUY_DISABLED: '레인 비활성', ORIGIN_BUY_MODE_WATCH: 'WATCH 모드', ORIGIN_BUY_PAUSED: '일시 중지',
+  ORIGIN_BUY_TOO_LATE: 'FDV 상한 초과(이미 늦음)', ORIGIN_BUY_LIQUIDITY_LOW: '유동성 부족(수요 미확인)', ORIGIN_BUY_SCORE_BELOW_MIN: '점수 미달', ORIGIN_BUY_DISABLED: '레인 비활성', ORIGIN_BUY_MODE_WATCH: 'WATCH 모드', ORIGIN_BUY_PAUSED: '일시 중지',
   ORIGIN_BUY_HOUR_CAP: '시간당 한도', ORIGIN_BUY_DAY_CAP: '일별 한도', ORIGIN_BUY_DAILY_WEI_CAP: '일일 금액 한도', ORIGIN_BUY_WALLET_UNSET: '매수 지갑 미설정', ORIGIN_BUY_NOT_FUNDED: '지갑 잔액 부족',
   ORIGIN_BUY_DUPLICATE: '이미 매수', ORIGIN_BUY_KEY_COOLDOWN: '쿨다운', ORIGIN_BUY_PAIR_ROUTE_UNKNOWN: '페어 경로 없음', ORIGIN_BUY_CURVE_PAIR_UNSUPPORTED: 'ERC-20 페어 커브(미지원)', ORIGIN_BUY_POOL_EMPTY: '풀 유동성 없음',
   ORIGIN_BUY_ROUTE_UNAVAILABLE: '매수 경로 없음', ORIGIN_BUY_SIMULATION_FAILED: '시뮬레이션 실패', ORIGIN_BUY_DAILY_BUDGET: '일일 예산 부족', ORIGIN_BUY_SOCIAL_MATCH_REQUIRED: '프로필 일치 필요', ORIGIN_BUY_REVERTED: '체인에서 실패',
