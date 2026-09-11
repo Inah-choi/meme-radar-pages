@@ -1,0 +1,29 @@
+.origin-buy-status { margin: 0 0 18px; font-size: 12px; }
+.origin-buy-panel { margin-bottom: 20px; }
+.origin-buy-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; margin-top: 14px; }
+.origin-buy-setting { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line,#27333e); border-radius: 10px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.origin-buy-setting-label { font-size: 10px; color: var(--muted,#91a0af); letter-spacing: .04em; }
+.origin-buy-setting strong { font-size: 13px; }
+.origin-buy-signals, .origin-buy-buys { margin-bottom: 20px; }
+.origin-buy-title { margin: 0 0 12px; font-size: 15px; }
+.origin-buy-table-wrap { overflow-x: auto; }
+.origin-buy-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.origin-buy-table th { padding: 12px 14px; text-align: left; font-size: 11px; color: var(--muted,#91a0af); font-weight: 500; }
+.origin-buy-table td { padding: 14px; vertical-align: top; border-top: 1px solid var(--line,#27333e); font-size: 12px; white-space: normal; line-height: 1.55; }
+.origin-buy-line { display: block; margin-top: 4px; font-size: 11px; }
+.origin-buy-score strong { font-size: 20px; color: var(--lime,#c4f566); font-variant-numeric: tabular-nums; }
+.origin-buy-score small { color: var(--muted,#91a0af); margin-left: 2px; }
+.origin-buy-row.state-bought .origin-buy-score strong, .origin-buy-row.state-buying .origin-buy-score strong { color: #7fd1ff; }
+.origin-buy-row.state-held .origin-buy-score strong, .origin-buy-row.state-failed .origin-buy-score strong { color: var(--muted,#91a0af); }
+.origin-buy-token strong { display: block; font-size: 14px; letter-spacing: .03em; }
+.origin-buy-post { max-width: 340px; }
+.origin-buy-excerpt { display: block; margin-top: 6px; font-size: 11px; color: #c9d4de; overflow-wrap: anywhere; }
+.origin-buy-market { max-width: 300px; }
+.origin-buy-reasons { display: block; margin-top: 6px; font-size: 10px; color: var(--muted,#91a0af); line-height: 1.6; }
+.origin-buy-hold { color: var(--warning,#e8c377); }
+.origin-buy-number { font-variant-numeric: tabular-nums; }
+.origin-buy-action { white-space: nowrap; }
+.origin-buy-action:disabled { opacity: .5; cursor: not-allowed; }
+.origin-buy-empty { margin: 8px 0 0; font-size: 12px; }
+.origin-buy-note { font-size: 11px; line-height: 1.7; }
+@media (max-width: 900px) { .origin-buy-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

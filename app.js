@@ -1,8 +1,9 @@
-import {createRadarReview} from './radar-review.mjs?v=5dc7bf616acd5cde7601';
-import {createBangerRadar} from './banger-radar.mjs?v=5dc7bf616acd5cde7601';
-import {createMyTokens} from './my-tokens.mjs?v=5dc7bf616acd5cde7601';
-import {API_ORIGIN} from './deployment-config.mjs?v=5dc7bf616acd5cde7601';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=5dc7bf616acd5cde7601';
+import {createRadarReview} from './radar-review.mjs?v=aeae51cf9ec777ff6258';
+import {createBangerRadar} from './banger-radar.mjs?v=aeae51cf9ec777ff6258';
+import {createMyTokens} from './my-tokens.mjs?v=aeae51cf9ec777ff6258';
+import {createOriginBuy} from './origin-buy.mjs?v=aeae51cf9ec777ff6258';
+import {API_ORIGIN} from './deployment-config.mjs?v=aeae51cf9ec777ff6258';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=aeae51cf9ec777ff6258';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -50,6 +51,7 @@ const reviewRadar = createRadarReview({api,onOpenCandidate:openCandidate,onNavig
 }});
 const bangerRadar = createBangerRadar({api,onOpenCandidate:openCandidate,toast});
 const myTokens = createMyTokens({api, assetUrl: value => validUrl(value)});
+const originBuy = createOriginBuy({api, toast});
 const labels = {
   radar: "밈 레이더",
   bangers: "뱅어 레이더",
@@ -57,6 +59,7 @@ const labels = {
   flash: "플래시 발행",
   "hot-lane": "핫 레인",
   'my-tokens': "내 토큰",
+  'origin-buy': "원본 매수",
   collectors: "수집 소스",
   policy: "자동화 정책",
 };
@@ -656,6 +659,7 @@ function disconnect(notify = true) {
   reviewRadar.reset();
   bangerRadar.reset();
   myTokens.reset();
+  originBuy.reset();
   forgetApiSession(sessionStorage, state.apiOrigin, location.origin);
   $("#workspace").hidden = true;
   $("#login-screen").hidden = false;
@@ -768,6 +772,7 @@ async function refresh({ silent = false } = {}) {
     if (state.page === "flash") await fetchFlashLane();
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
     if (state.page === "my-tokens") void myTokens.refresh();
+    if (state.page === "origin-buy") void originBuy.refresh();
     if (results[1].status === "rejected") throw results[1].reason;
   } catch (error) {
     state.lastError = `갱신 실패: ${error.message} 마지막 성공 데이터를 표시합니다.`;
@@ -3715,6 +3720,7 @@ function navigate() {
   document.title = `${labels[state.page]} · Meme Observatory`;
   if (state.page === "bangers" && state.key) bangerRadar.render();
   if (state.page === "my-tokens" && state.key) void myTokens.render();
+  if (state.page === "origin-buy" && state.key) void originBuy.render();
   if (state.key) refresh({ silent: true });
 }
 function updateApiConnectionLinks(input = state.apiOrigin) {
