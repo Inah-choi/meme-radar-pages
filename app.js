@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=56a606ee63d076f63b98';
-import {createBangerRadar} from './banger-radar.mjs?v=56a606ee63d076f63b98';
-import {createMyTokens} from './my-tokens.mjs?v=56a606ee63d076f63b98';
-import {createOriginBuy} from './origin-buy.mjs?v=56a606ee63d076f63b98';
-import {createPaperTrial} from './paper-trial.mjs?v=56a606ee63d076f63b98';
-import {API_ORIGIN} from './deployment-config.mjs?v=56a606ee63d076f63b98';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=56a606ee63d076f63b98';
+import {createRadarReview} from './radar-review.mjs?v=9cfe69a3c929a31dae3a';
+import {createBangerRadar} from './banger-radar.mjs?v=9cfe69a3c929a31dae3a';
+import {createMyTokens} from './my-tokens.mjs?v=9cfe69a3c929a31dae3a';
+import {createOriginBuy} from './origin-buy.mjs?v=9cfe69a3c929a31dae3a';
+import {createPaperTrial} from './paper-trial.mjs?v=9cfe69a3c929a31dae3a';
+import {API_ORIGIN} from './deployment-config.mjs?v=9cfe69a3c929a31dae3a';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=9cfe69a3c929a31dae3a';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),

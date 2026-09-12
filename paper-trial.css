@@ -18,6 +18,11 @@
 .paper-trial-lane-total { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.6; }
 .paper-trial-lane-total span { color: var(--muted); font-variant-numeric: tabular-nums; }
 .paper-trial-lane-badge { margin-left: 8px; }
+.paper-trial-selection { margin-bottom: 28px; }
+.paper-selection-summary { padding: 23px; margin-bottom: 14px; border-color: var(--lime-muted); }
+.paper-selection-summary h2 { font-size: 16px; }
+.paper-selection-summary p { font-size: 12px; line-height: 1.8; }
+.paper-trial-selection .paper-trial-decisions { max-height: 740px; overflow-y: auto; }
 .paper-trial-safety { color: var(--lime); font-size: 12px; line-height: 1.8; }
 .paper-trial-clock { font-size: 19px; font-variant-numeric: tabular-nums; margin: 22px 0 10px; }
 .paper-trial-progress { display: block; width: 100%; height: 7px; accent-color: var(--lime); border: 0; border-radius: 7px; background: var(--surface-raised); overflow: hidden; }

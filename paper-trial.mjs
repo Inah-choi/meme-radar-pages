@@ -6,7 +6,17 @@ const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(val
 const statuses = { running: '모의 운영 중', completed: '관찰 기간 완료', stopped: '관찰 중지됨' };
 const verdicts = { good: '판단이 맞아요', bad: '판단이 틀렸어요', missed: '발행 기회를 놓쳤어요', unsure: '더 지켜볼게요' };
 const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시' };
+const targetLabels = { target_observed_after_decision: '판단 전 $1M 미만 → 이후 $1M 관측', already_at_target_before_decision: '판단 전에 이미 $1M',
+  pre_decision_hit_received_late: '판단 전 $1M 자료를 늦게 수신', post_decision_target_baseline_unknown: '이후 $1M 관측·판단 전 기준값 없음',
+  no_post_decision_observation: '판단 후 시장 관측 없음', fdv_only_target_observed: 'FDV만 $1M 관측', below_target_observed: '$1M 미만 관측', market_cap_unavailable: '시총 자료 없음' };
 const reasonLabels = {
+  CHALLENGER_SPECIFIC_SUBJECT_REQUIRED: '구체적인 사건·밈 구절 확인 필요', CHALLENGER_SOURCE_NAME_REQUIRED: '원문에 근거한 이름 검토 필요',
+  CHALLENGER_INITIAL_REACH_REQUIRED: '초기 반응 기준 미달', CHALLENGER_SOURCE_STALE: '게시 후 2시간 초과',
+  CHALLENGER_METRICS_STALE: '20분 이내의 새 반응 관측 없음', CHALLENGER_EXISTING_TOKEN_CONTEXT: '이미 발행된 토큰·종목 홍보 맥락',
+  CHALLENGER_PROMOTION: '광고·판매·홍보 게시물', CHALLENGER_ORIGINAL_REQUIRED: '원문 확인 필요',
+  CHALLENGER_OBSERVATION_REQUIRED: '판단 시점에 사용 가능한 관측 없음', CHALLENGER_PUBLIC_SOURCE_REQUIRED: '공개 원문 확인 필요',
+  CHALLENGER_SOURCE_TIME_INVALID: '원문 시각 확인 필요', CHALLENGER_OBSERVATION_CONFLICT: '같은 시각의 관측이 서로 다름',
+  CHALLENGER_UNTRUSTED_INSTRUCTION: '원문에 실행 지시 포함', CHALLENGER_SOURCE_ATTRIBUTION_REQUIRED: '작성자·출처 확인 필요',
   HOT_SOURCE_EVIDENCE_REQUIRED: '최근 공개 원문 증거 부족', HOT_CORROBORATION_REQUIRED: '원문 확산·핵심 계정 교차 확인 부족',
   HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복 확인 자료 부족', HOT_MARKET_SATURATED: '같은 이름·티커의 경쟁 토큰 과밀',
   HOT_ATTENTION_UNCONFIRMED: '반응 증가·독립 확산 확인 부족', HOT_REVIEW_REQUIRED: '소재 검토 미완료',
@@ -43,8 +53,8 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const add = (parent, ...children) => { parent.append(...children.filter(Boolean)); return parent; };
   const button = (label, id, className = 'button subtle') => { const node = el('button', className, label); node.type = 'button'; node.id = id; return node; };
   let snapshot = null, loading = false, pending = false, exporting = false, error = '', epoch = 0, resetEpoch = 0, selectedSession = '', renderedSession = null, offset = 0;
-  let configDirty = false, configSession = null;
-  const drafts = new Map(), rows = new Map();
+  let configDirty = false, configSession = null, selectionSession = null;
+  const drafts = new Map(), rows = new Map(), selectionRows = new Map();
   const heading = add(el('div', 'page-heading'), add(el('div'), el('div', 'eyebrow', 'PAPER TRIAL · OBSERVE, THEN REVIEW'), el('h1', '', '모의 운영'), el('p', 'muted', '하루 이틀 동안 발행 판단을 기록하고, 무엇이 잘못됐는지 피드백하세요.')));
   const refreshButton = button('새로고침 ↻', 'paper-trial-refresh');
   refreshButton.addEventListener('click', () => refresh({ force: true })); heading.append(refreshButton);
@@ -108,6 +118,29 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   add(readinessPanel, readiness, blockers, coverage, limitations, downloadButton, el('p', 'paper-trial-next muted', '관찰 종료 후에도 가스비 차단이 유지됩니다. 피드백을 검토하고 문제를 수정한 뒤, 관리자가 별도로 실제 운영을 설정해야 합니다.'));
   add(diagnostics, reasonsPanel, readinessPanel);
 
+  const selectionPanel = el('section', 'paper-trial-selection'); selectionPanel.id = 'paper-trial-selection';
+  const selectionToggle = button('뉴스·밈 비교 모의 켜기', 'paper-selection-toggle', 'button small subtle');
+  const selectionStatus = el('p', 'muted'); selectionStatus.id = 'paper-selection-status';
+  const selectionCounts = el('p'); selectionCounts.id = 'paper-selection-counts';
+  const selectionReasons = el('p', 'muted'); selectionReasons.id = 'paper-selection-reasons';
+  const marketStatus = el('p', 'muted'); marketStatus.id = 'paper-selection-market';
+  const winners = el('ul', 'paper-trial-limitations'); winners.id = 'paper-selection-winners';
+  const selectionDecisions = el('div', 'paper-trial-decisions'); selectionDecisions.id = 'paper-selection-decisions';
+  add(selectionPanel, add(el('div', 'panel paper-selection-summary'), add(el('div', 'panel-heading'), el('h2', '', '뉴스·밈 비교 실험 · $1M 관측'), selectionToggle), selectionStatus,
+    selectionCounts, selectionReasons, marketStatus, winners, el('p', 'muted', '공개 원문의 초기 반응으로 고르는 미검증 가설입니다. 기존 발행 경로와 별도 집계합니다. 다른 토큰의 시가총액은 우리 토큰의 예상 성과가 아닙니다.')), selectionDecisions);
+  selectionToggle.addEventListener('click', async () => {
+    if (!snapshot?.canManage || snapshot.session?.status !== 'running' || pending || loading || [...drafts.values()].some(value => value.pending)) return;
+    const requested = snapshot.simulation?.selectionChallenger !== true;
+    pending = true; const mine = ++epoch; draw();
+    try {
+      const next = await api('/api/paper-trial/config', { method: 'PATCH', body: { selectionChallenger: requested } });
+      if (mine !== epoch) return;
+      snapshot = { ...snapshot, ...next, decisions: snapshot.decisions, pagination: snapshot.pagination };
+      toast(`뉴스·밈 비교 모의를 ${requested ? '켰습니다' : '껐습니다'}. 이전 판단은 보존됩니다.`); onChange();
+    } catch (failure) { if (mine === epoch) error = failure.message || '비교 설정을 적용하지 못했습니다.'; }
+    finally { if (mine === epoch) { pending = false; draw(); } }
+  });
+
   const journal = el('section', 'paper-trial-journal'); journal.setAttribute('aria-label', '모의 발행 판단과 피드백');
   const journalHeading = el('div', 'panel-heading');
   const history = el('select'); history.id = 'paper-trial-history'; history.setAttribute('aria-label', '모의 운영 기록 선택');
@@ -123,7 +156,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   nextButton.addEventListener('click', () => { if (nextButton.disabled) return; offset += 50; return refresh({ force: true }); });
   add(paging, previousButton, pageCount, nextButton);
   add(journal, journalHeading, empty, decisions, paging);
-  add(root, heading, status, controlPanel, stats, laneStats, diagnostics, journal);
+  add(root, heading, status, controlPanel, stats, laneStats, selectionPanel, diagnostics, journal);
 
   function decisionRow(item) {
     const article = el('article', 'panel paper-trial-decision'); article.setAttribute('aria-label', '후보 판단과 피드백');
@@ -134,6 +167,8 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     const presentation = el('p', 'paper-trial-presentation');
     const rationale = el('p', 'paper-trial-rationale');
     const observation = el('p', 'muted paper-trial-observation');
+    const marketObservation = el('p', 'muted paper-trial-observation');
+    const sourceLink = el('a', 'paper-trial-source-link', '판단에 사용한 원문 ↗'); sourceLink.target = '_blank'; sourceLink.rel = 'noopener noreferrer';
     const form = el('form', 'paper-trial-feedback');
     const choice = el('select'); choice.id = `paper-verdict-${item.id}`;
     const choiceLabel = el('label', '', '이 판단은 어땠나요?'); choiceLabel.htmlFor = choice.id;
@@ -171,12 +206,12 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       finally { state.pending = false; if (sessionEpoch === epoch) draw(); }
     });
     add(form, add(el('div', 'paper-trial-field'), choiceLabel, choice), add(el('div', 'paper-trial-field paper-trial-note-field'), noteLabel, note), add(el('div', 'paper-trial-save'), save, feedbackStatus));
-    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, rationale, observation, form);
+    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, rationale, observation, marketObservation, sourceLink, form);
     function update(next = item) {
       item = next;
       const issued = item.decision === 'would_launch', initial = item.snapshot ?? {}, later = item.latestObservation;
       outcome.textContent = issued ? '모의 발행' : '보류'; outcome.className = `pill ${issued ? 'success' : 'warning'}`;
-      lane.textContent = `${laneLabels[item.lane] || item.lane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
+      lane.textContent = `${item.lane === 'challenger' ? '뉴스·밈 비교 가설' : laneLabels[item.lane] || item.lane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
       title.textContent = item.title || item.candidateId || '이름 미확인'; when.textContent = date(item.createdAt);
       const token = initial.presentation ?? {};
       presentation.textContent = [token.name, token.symbol ? `$${token.symbol}` : null, token.description].filter(Boolean).join(' · '); presentation.hidden = !presentation.textContent;
@@ -185,6 +220,16 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       if (cautions.length) rationale.textContent += ` · 검토 근거: ${cautions.join(' · ')}`;
       observation.textContent = `판단 당시 점수 ${count(initial.score)} · 작성자 ${count(initial.uniqueAuthors)}명 · 독립 출처 ${count(initial.independentSources)}개`;
       if (later) observation.textContent += ` → 최근 점수 ${count(later.score)} (${change(later.scoreDelta)}) · 작성자 ${count(later.uniqueAuthors)}명 (${change(later.authorDelta)}) · ${date(later.observedAt)}${later.stale ? ' · 오래된 관측' : ''}`;
+      if (item.lane === 'challenger') {
+        observation.textContent = `원문 ${date(initial.source?.publishedAt)} · 수신 ${date(initial.source?.receivedAt)} · 당시 조회 ${count(initial.attention?.views)} / 좋아요 ${count(initial.attention?.likes)} · 초기 반응만 확인`;
+        observation.textContent += list(item.followups).map(f => ` · ${f.minutes}분 후: ${f.status === 'observed' ? `조회 ${count(f.metrics?.views)} / 좋아요 ${count(f.metrics?.likes)}${f.delayMinutes > 0 ? ` (${f.delayMinutes}분 늦은 관측)` : ''}` : f.status === 'waiting' ? '대기' : f.status === 'ended_before_checkpoint' ? '회차 종료로 관찰하지 못함' : '새 관측 없음'}`).join('');
+        const matches = list(item.outcome?.matches);
+        observation.textContent += matches.length ? ` · 관련 시장 관측 ${matches.length}건 (${item.outcome.matchType === 'exact_token' ? '동일 체인·계약' : '소재 유사·동일 토큰 미확인'})` : ' · 관련 토큰 연결 미확인';
+      }
+      marketObservation.textContent = list(item.outcome?.matches).slice(0,3).map(match => `${match.tokenName || match.tokenSymbol || '이름 미확인'} (${match.chain || '체인 미확인'} · ${match.sameAssetVerified ? '동일 계약 확인' : '소재 유사·동일 자산 아님'}) · ${targetLabels[match.targetStatus] || '결과 미확인'} · 관측 최고 시총 $${count(match.peakMarketCapUsd)} / FDV $${count(match.peakFdvUsd)}${match.firstTargetObservedAt ? ` · 첫 $1M 관측 ${date(match.firstTargetObservedAt)}` : ''}`).join('\n');
+      marketObservation.hidden = !marketObservation.textContent;
+      let url = null; try { const candidate = new URL(initial.source?.url); if (['https:','http:'].includes(candidate.protocol)) url = candidate.href; } catch {}
+      sourceLink.hidden = !url; sourceLink.href = url || '';
       if (!state.dirty && !state.pending) { state.verdict = item.feedback?.verdict || state.verdict; state.note = item.feedback?.note ?? state.note; choice.value = state.verdict; note.value = state.note; }
       choice.disabled = note.disabled = snapshot?.canFeedback !== true || state.pending;
       save.disabled = snapshot?.canFeedback !== true || !verdicts[state.verdict] || !state.dirty || state.pending;
@@ -227,6 +272,27 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     for (const [lane, value] of Object.entries(laneRows)) {
       const totals = report?.laneCounts?.[lane];
       value.textContent = `판단 ${count(totals?.evaluated)}건 · 모의 발행 ${count(totals?.wouldLaunch)}건 · 보류 ${count(totals?.held)}건`;
+    }
+    const selection = report?.selection, market = selection?.market;
+    const selectionEnabled = snapshot?.simulation?.selectionChallenger === true;
+    selectionToggle.textContent = `뉴스·밈 비교 모의 ${selectionEnabled ? '끄기' : '켜기'}`;
+    selectionToggle.disabled = !active || snapshot?.canManage !== true || pending || loading || savingFeedback;
+    selectionStatus.textContent = `${selectionEnabled ? '비교 관찰 중' : '비교 경로 꺼짐'} · 최근 ${date(selection?.lastTickAt)} · 원문 2시간 이내 / 반응 관측 20분 이내 · 좋아요 100 이상 또는 조회 1만 + 반응 10 이상`;
+    selectionCounts.textContent = `비교 모의 발행 ${count(selection?.counts?.wouldLaunch)}건 · 보류 ${count(selection?.counts?.held)}건 · 소재 ${count(selection?.counts?.candidates)}개 · 피드백 ${count(selection?.counts?.feedback)}건`;
+    if (selection?.review) selectionCounts.textContent += ` · 좋은 선택 ${count(selection.review.good)} / 잘못된 선택 ${count(selection.review.bad)} / 놓침 ${count(selection.review.missed)} / 판단 보류 ${count(selection.review.unsure)}${selection.review.status === 'needs_review' ? ' · 개선 검토 필요' : ''}`;
+    selectionReasons.textContent = list(selection?.reasonCounts).slice(0,4).map(item => `${reasonText(item.reason)} ${count(item.count)}건`).join(' · ');
+    if (selection?.coverage) selectionReasons.textContent += ` · 이번 검사 ${count(selection.coverage.evaluatedThisTick)} / ${count(selection.coverage.poolSize)}개${selection.coverage.truncated ? ' · 입력 범위 제한' : ''}`;
+    marketStatus.textContent = market ? `시장 관측 ${date(market.asOf)} · 시총 $1M 관측 토큰 ${count(market.counts?.observedMarketCapTargetTokens)}개 · FDV만 $1M ${count(market.counts?.fdvOnlyTargetTokens)}개 · 원문 연결 미확인 ${count(market.counts?.unmatchedObservedWinners)}개 · 전체 시장을 조사한 결과는 아닙니다.${market.coverage?.truncated ? ' 관측 조회 상한에 도달해 일부 기록이 빠져 있습니다.' : ''}` : '시장 관측 대기 · 시가총액과 FDV는 구분합니다. 관측 없음은 실패가 아닙니다.';
+    if (market) marketStatus.textContent += ` 전체 경로의 동일 계약 확인: 선행 선택 ${count(market.counts?.selectedBeforeObservedTarget)} / 보류 후 도달 ${count(market.counts?.heldBeforeObservedTarget)}. 소재 유사 기준: 선행 선택 ${count(market.counts?.selectedMaterialProxyTarget)} / 보류 후 도달 ${count(market.counts?.heldMaterialProxyTarget)}. 소재 유사는 예측 성공으로 세지 않습니다.`;
+    const comparison = market?.byLane?.challenger;
+    if (comparison) marketStatus.textContent += ` 뉴스·밈 비교 경로만: 동일 계약 선행 선택 ${count(comparison.selectedBeforeObservedTarget)} / 보류 후 도달 ${count(comparison.heldBeforeObservedTarget)}, 소재 유사 선행 선택 ${count(comparison.selectedMaterialProxyTarget)} / 보류 후 도달 ${count(comparison.heldMaterialProxyTarget)}.`;
+    winners.replaceChildren(...list(market?.unmatchedObservedWinners).slice(0,8).map(item => el('li', '', `${item.tokenName || item.tokenSymbol || '이름 미확인'} · ${item.chain || '체인 미확인'} · 관측 최고 $${count(item.peakMarketCapUsd)} · 최초 $1M 관측 ${date(item.firstTargetObservedAt)} · 소재 연결 미확인`)));
+    const selectionItems = list(selection?.decisions), selectionPresent = new Set(selectionItems.map(item => item.id));
+    if (selectionSession !== session?.id) { selectionRows.clear(); selectionDecisions.replaceChildren(); selectionSession = session?.id; }
+    for (const [id, row] of selectionRows) if (!selectionPresent.has(id) && !drafts.get(id)?.dirty && !drafts.get(id)?.pending) { row.node.remove(); selectionRows.delete(id); }
+    for (const item of selectionItems) {
+      if (!selectionRows.has(item.id)) { const row = decisionRow(item); selectionRows.set(item.id, row); selectionDecisions.append(row.node); }
+      selectionRows.get(item.id).update(item);
     }
     reasons.replaceChildren(...(list(report?.reasonCounts).length ? report.reasonCounts.map(item => add(el('li'), el('span', '', reasonText(item.reason)), el('strong', '', `${count(item.count)}건`))) : [el('li', 'muted', session ? '아직 보류 이유가 기록되지 않았습니다.' : '시험을 시작하면 반복 문제를 집계합니다.')]));
     readiness.textContent = { collecting: '관찰 중 · 표본을 모으고 있어요', needs_review: '문제 확인이 필요해요', ready_for_review: '기간 완료 · 피드백을 검토하세요' }[report?.readiness?.status] || '검토 준비';
@@ -313,16 +379,18 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
         exportOffset += page.pagination?.limit || 200;
       } while (page.pagination?.hasMore === true);
       const total = page.pagination?.total ?? page.report?.counts?.evaluated ?? all.size;
-      const complete = all.size >= total;
-      download({ ...page, decisions: [...all.values()], pagination: { offset: 0, limit: all.size, total, hasMore: !complete }, exported: { startedAt, completedAt: new Date().toISOString(), complete, note: complete ? '모든 페이지의 판단과 피드백' : '관찰 중 새 판단이 추가되었습니다. 관찰 종료 후 다시 저장하면 전체 기록을 함께 확인할 수 있습니다.' } });
+      const selectionEvidence = page.report?.selection ? await api(`/api/paper-trial/selection-export?sessionId=${encodeURIComponent(page.session.id)}`) : null;
+      if (mine !== resetEpoch) return;
+      const complete = all.size >= total && (!page.report?.selection || selectionEvidence?.complete === true);
+      download({ ...page, selectionEvidence, decisions: [...all.values()], pagination: { offset: 0, limit: all.size, total, hasMore: !complete }, exported: { startedAt, completedAt: new Date().toISOString(), complete, note: complete ? '모든 페이지의 판단·피드백과 비교 경로의 전체 판단·시장 근거' : '관찰 중 새 판단이 추가되었습니다. 관찰 종료 후 다시 저장하면 전체 기록을 함께 확인할 수 있습니다.' } });
       toast(complete ? `판단 ${all.size}건과 피드백을 보고서에 저장했습니다.` : '보고서를 저장했습니다. 저장 중 새 판단이 추가되어 관찰 종료 후 다시 저장해 주세요.');
     } catch (failure) { if (mine === resetEpoch) toast(failure.message || '보고서를 저장하지 못했습니다.', true); }
     finally { if (mine === resetEpoch) { exporting = false; draw(); } }
   }
   function reset() {
     epoch++; resetEpoch++; snapshot = null; loading = false; pending = false; exporting = false; error = ''; selectedSession = ''; renderedSession = null; offset = 0;
-    configDirty = false; configSession = null; startHotAuto.checked = true;
-    rows.clear(); drafts.clear(); decisions.replaceChildren(); draw();
+    configDirty = false; configSession = null; selectionSession = null; startHotAuto.checked = true;
+    rows.clear(); selectionRows.clear(); drafts.clear(); decisions.replaceChildren(); selectionDecisions.replaceChildren(); draw();
   }
   draw();
   return { render: refresh, refresh, reset };
