@@ -5,6 +5,24 @@ const count = value => number(value) === null ? '—' : value.toLocaleString('ko
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
 const statuses = { running: '모의 운영 중', completed: '관찰 기간 완료', stopped: '관찰 중지됨' };
 const verdicts = { good: '판단이 맞아요', bad: '판단이 틀렸어요', missed: '발행 기회를 놓쳤어요', unsure: '더 지켜볼게요' };
+const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시' };
+const reasonLabels = {
+  HOT_SOURCE_EVIDENCE_REQUIRED: '최근 공개 원문 증거 부족', HOT_CORROBORATION_REQUIRED: '원문 확산·핵심 계정 교차 확인 부족',
+  HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복 확인 자료 부족', HOT_MARKET_SATURATED: '같은 이름·티커의 경쟁 토큰 과밀',
+  HOT_ATTENTION_UNCONFIRMED: '반응 증가·독립 확산 확인 부족', HOT_REVIEW_REQUIRED: '소재 검토 미완료',
+  HOT_REVIEW_REJECTED: '소재 검토에서 제외', HOT_REVIEW_WATCH: '소재 검토에서 추가 관찰 필요', HOT_QUALITY_UNCONFIRMED: '소재 적합성 확인 부족',
+  HOT_SIGNAL_NOT_ARMED: '발행 대기 상태가 아님', HOT_SIGNAL_EXPIRED: '신호의 발행 대기 시간 만료', HOT_RETRY_PENDING: '재검토 예정 시각 대기',
+  HOT_ASSESSMENT_TIME_INVALID: '판단 시각 확인 필요', HOT_SIGNAL_TIME_INVALID: '신호 시각 확인 필요',
+  HOT_LANE_DISABLED: '핫레인 비활성 설정', HOT_LANE_MODE_WATCH: '관찰 전용 모드', HOT_LANE_EMERGENCY_STOP: '긴급 정지 상태',
+  HOT_LANE_POLICY_PAUSED: '자동화 일시 정지', HOT_LANE_PAUSED: '핫레인 일시 정지',
+  HOT_LANE_HOUR_CAP: '핫레인 시간당 한도 도달', HOT_LANE_DAY_CAP: '핫레인 일일 한도 도달', HOT_GLOBAL_SPACING: '핫레인 발행 간격 대기',
+  HOT_DUPLICATE_LAUNCH: '동일 소재 발행 기록 존재', FLASH_DUPLICATE_LAUNCH: '동일 소재 플래시 발행 기록 존재',
+  FLASH_LANE_DISABLED: '플래시 레인 비활성 설정', FLASH_LANE_PAUSED: '플래시 레인 일시 정지',
+  FLASH_HOUR_CAP: '플래시 시간당 한도 도달', FLASH_DAY_CAP: '플래시 일일 한도 도달', FLASH_KEY_COOLDOWN: '동일 소재 재요청 대기',
+  HOT_PROMOTIONAL_TAG_CAMPAIGN: '해시태그 홍보 캠페인', HOT_FAN_CAMPAIGN: '팬 참여·투표 캠페인',
+  HOT_TOKEN_PROMOTION: '기존 토큰 매수 홍보', HOT_CAMPAIGN_PROMOTION: '선거·참여 홍보 캠페인',
+};
+const reasonText = value => Object.hasOwn(reasonLabels, value) ? `${reasonLabels[value]} (${value})` : value;
 export function formatTrialHours(value) {
   if (number(value) === null) return '—';
   const minutes = Math.max(0, Math.floor(value * 60));
@@ -25,6 +43,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const add = (parent, ...children) => { parent.append(...children.filter(Boolean)); return parent; };
   const button = (label, id, className = 'button subtle') => { const node = el('button', className, label); node.type = 'button'; node.id = id; return node; };
   let snapshot = null, loading = false, pending = false, exporting = false, error = '', epoch = 0, resetEpoch = 0, selectedSession = '', renderedSession = null, offset = 0;
+  let configDirty = false, configSession = null;
   const drafts = new Map(), rows = new Map();
   const heading = add(el('div', 'page-heading'), add(el('div'), el('div', 'eyebrow', 'PAPER TRIAL · OBSERVE, THEN REVIEW'), el('h1', '', '모의 운영'), el('p', 'muted', '하루 이틀 동안 발행 판단을 기록하고, 무엇이 잘못됐는지 피드백하세요.')));
   const refreshButton = button('새로고침 ↻', 'paper-trial-refresh');
@@ -39,22 +58,41 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const duration = el('select'); duration.id = 'paper-trial-duration';
   for (const hours of [24, 48]) { const option = el('option', '', `${hours === 24 ? '하루' : '이틀'} · ${hours}시간`); option.value = String(hours); duration.append(option); }
   duration.value = '48';
+  const startHotAuto = el('input'); startHotAuto.type = 'checkbox'; startHotAuto.id = 'paper-trial-start-hot-auto'; startHotAuto.checked = true;
+  const startHotLabel = add(el('label', 'paper-trial-checkbox'), startHotAuto, el('span', '', '핫레인 자동 발행도 모의 실행'));
   const startButton = button('모의 운영 시작', 'paper-trial-start', 'button primary');
   const stopButton = button('지금 종료하고 검토', 'paper-trial-stop');
   startButton.addEventListener('click', () => control('start'));
   stopButton.addEventListener('click', () => control('stop'));
-  add(controls, add(el('div', 'paper-trial-field'), durationLabel, duration), startButton, stopButton);
+  add(controls, add(el('div', 'paper-trial-field'), durationLabel, duration), startHotLabel, startButton, stopButton);
+  const simulationPanel = el('div', 'paper-trial-simulation');
+  const simulationStatus = el('p', 'paper-trial-simulation-status'); simulationStatus.id = 'paper-trial-simulation-status';
+  const configControls = el('div', 'paper-trial-config-controls');
+  const hotAuto = el('input'); hotAuto.type = 'checkbox'; hotAuto.id = 'paper-trial-hot-auto';
+  hotAuto.addEventListener('change', () => { configDirty = true; draw(); });
+  const hotAutoLabel = add(el('label', 'paper-trial-checkbox'), hotAuto, el('span', '', '핫레인 자동 발행도 모의 실행'));
+  const applyConfigButton = button('모의 설정 적용', 'paper-trial-config-apply', 'button small subtle');
+  applyConfigButton.addEventListener('click', configure);
+  add(configControls, hotAutoLabel, applyConfigButton);
+  add(simulationPanel, simulationStatus, configControls, el('p', 'muted', '모의 판단에만 적용합니다. 실제 자동 발행 설정과 가스비 차단은 유지됩니다. 변경 전 기록도 그대로 보관합니다.'));
   const safety = el('p', 'paper-trial-safety'); safety.id = 'paper-trial-safety';
   const clock = el('p', 'paper-trial-clock'); clock.id = 'paper-trial-clock';
   const progress = el('progress', 'paper-trial-progress'); progress.max = 100; progress.value = 0; progress.setAttribute('aria-label', '모의 운영 관찰 시간');
   const schedule = el('p', 'muted paper-trial-schedule'); schedule.id = 'paper-trial-schedule';
-  add(controlPanel, controlHeading, controls, safety, clock, progress, schedule);
+  add(controlPanel, controlHeading, controls, simulationPanel, safety, clock, progress, schedule);
 
   const stats = el('div', 'stats-grid paper-trial-stats'); stats.id = 'paper-trial-stats';
   const statValues = {};
   for (const [key, label, detail] of [['evaluated', '판단 기록', '동일 후보를 다시 검토한 기록 포함'], ['wouldLaunch', '모의 발행', '선별 조건을 통과한 후보'], ['held', '보류 판단', '제외·대기 이유를 함께 기록'], ['feedback', '피드백 완료', '운영자가 확인한 판단']]) {
     statValues[key] = el('div', `stat-value${key === 'wouldLaunch' ? ' lime' : ''}`, '—');
     add(stats, add(el('div', 'stat-card'), el('div', 'stat-label', label), statValues[key], el('div', 'stat-description', detail)));
+  }
+  const laneStats = el('section', 'panel paper-trial-lanes'); laneStats.id = 'paper-trial-lanes'; laneStats.setAttribute('aria-label', '발행 경로별 모의 운영 집계');
+  const laneRows = {};
+  add(laneStats, el('h2', '', '발행 경로별 기록'));
+  for (const [lane, label] of Object.entries(laneLabels)) {
+    laneRows[lane] = el('span'); laneRows[lane].id = `paper-trial-lane-${lane}`;
+    add(laneStats, add(el('div', 'paper-trial-lane-total'), el('strong', '', label), laneRows[lane]));
   }
   const diagnostics = el('div', 'paper-trial-diagnostics');
   const reasonsPanel = el('section', 'panel');
@@ -85,11 +123,12 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   nextButton.addEventListener('click', () => { if (nextButton.disabled) return; offset += 50; return refresh({ force: true }); });
   add(paging, previousButton, pageCount, nextButton);
   add(journal, journalHeading, empty, decisions, paging);
-  add(root, heading, status, controlPanel, stats, diagnostics, journal);
+  add(root, heading, status, controlPanel, stats, laneStats, diagnostics, journal);
 
   function decisionRow(item) {
     const article = el('article', 'panel paper-trial-decision'); article.setAttribute('aria-label', '후보 판단과 피드백');
     const outcome = el('span', 'pill');
+    const lane = el('span', 'pill paper-trial-lane-badge');
     const title = el('h3');
     const when = el('span', 'muted paper-trial-decision-time');
     const presentation = el('p', 'paper-trial-presentation');
@@ -132,15 +171,18 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       finally { state.pending = false; if (sessionEpoch === epoch) draw(); }
     });
     add(form, add(el('div', 'paper-trial-field'), choiceLabel, choice), add(el('div', 'paper-trial-field paper-trial-note-field'), noteLabel, note), add(el('div', 'paper-trial-save'), save, feedbackStatus));
-    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, title), when), presentation, rationale, observation, form);
+    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, rationale, observation, form);
     function update(next = item) {
       item = next;
       const issued = item.decision === 'would_launch', initial = item.snapshot ?? {}, later = item.latestObservation;
       outcome.textContent = issued ? '모의 발행' : '보류'; outcome.className = `pill ${issued ? 'success' : 'warning'}`;
+      lane.textContent = `${laneLabels[item.lane] || item.lane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
       title.textContent = item.title || item.candidateId || '이름 미확인'; when.textContent = date(item.createdAt);
       const token = initial.presentation ?? {};
       presentation.textContent = [token.name, token.symbol ? `$${token.symbol}` : null, token.description].filter(Boolean).join(' · '); presentation.hidden = !presentation.textContent;
-      rationale.textContent = list(item.reasons).length ? list(item.reasons).join(' · ') : issued ? '선별 조건 통과 · 실제 발행은 하지 않았습니다.' : '보류 이유 미기록';
+      rationale.textContent = list(item.reasons).length ? list(item.reasons).map(reasonText).join(' · ') : issued ? '선별 조건 통과 · 실제 발행은 하지 않았습니다.' : '보류 이유 미기록';
+      const cautions = [...new Set(list(initial.hotQuality?.cautions).filter(value => typeof value === 'string' && value.trim()))];
+      if (cautions.length) rationale.textContent += ` · 검토 근거: ${cautions.join(' · ')}`;
       observation.textContent = `판단 당시 점수 ${count(initial.score)} · 작성자 ${count(initial.uniqueAuthors)}명 · 독립 출처 ${count(initial.independentSources)}개`;
       if (later) observation.textContent += ` → 최근 점수 ${count(later.score)} (${change(later.scoreDelta)}) · 작성자 ${count(later.uniqueAuthors)}명 (${change(later.authorDelta)}) · ${date(later.observedAt)}${later.stale ? ' · 오래된 관측' : ''}`;
       if (!state.dirty && !state.pending) { state.verdict = item.feedback?.verdict || state.verdict; state.note = item.feedback?.note ?? state.note; choice.value = state.verdict; note.value = state.note; }
@@ -162,7 +204,18 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     startButton.disabled = !snapshot || snapshot.canManage !== true || anyActive || pending || loading || savingFeedback;
     startButton.textContent = session && !active ? '새 모의 운영 시작' : '모의 운영 시작';
     duration.disabled = startButton.disabled;
+    startHotAuto.disabled = startButton.disabled;
+    startHotLabel.hidden = active;
     stopButton.disabled = !active || snapshot?.canManage !== true || pending || loading || savingFeedback; stopButton.hidden = !active;
+    const simulation = snapshot?.simulation ?? report?.simulation;
+    if (configSession !== session?.id) { configSession = session?.id; configDirty = false; }
+    if (!configDirty) hotAuto.checked = simulation?.hotAuto === true;
+    hotAuto.disabled = !active || snapshot?.canManage !== true || pending || loading || savingFeedback;
+    configControls.hidden = !active;
+    applyConfigButton.disabled = hotAuto.disabled || !configDirty || hotAuto.checked === simulation?.hotAuto;
+    simulationStatus.textContent = session
+      ? `핫레인 자동 모의 실행 ${simulation?.hotAuto === true ? '켜짐' : simulation?.hotAuto === false ? '꺼짐' : '설정 미확인'}${number(simulation?.revision) !== null ? ` · 설정 ${simulation.revision}차` : ''}${simulation?.effectiveFrom ? ` · 적용 ${date(simulation.effectiveFrom)}` : ''}${configDirty && hotAuto.checked !== simulation?.hotAuto ? ' · 적용하지 않은 변경' : ''}`
+      : '핫레인 자동 발행 판단도 함께 기록하도록 기본 설정되어 있습니다.';
     const lock = snapshot?.safety?.liveLocked;
     safety.textContent = lock === true ? '가스비 차단 중 · 모의 운영이 끝나도 실제 발행·매수로 자동 전환되지 않습니다.' : '시작하면 실제 발행·매수를 차단하고 모의 판단만 기록합니다.';
     if (snapshot?.canManage === false) safety.textContent += ' 시작과 종료는 관리자만 할 수 있습니다.';
@@ -171,10 +224,16 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     progress.value = session?.durationHours && number(report?.elapsedHours) !== null ? Math.min(100, report.elapsedHours / session.durationHours * 100) : 0;
     schedule.textContent = session ? `시작 ${date(session.startedAt)} · 예정 종료 ${date(session.endsAt)}${session.stoppedAt ? ` · 실제 종료 ${date(session.stoppedAt)}` : ''}` : '서버가 실행 중일 때 관찰이 계속됩니다. 관측 공백도 보고서에 남습니다.';
     for (const [key, value] of Object.entries(statValues)) value.textContent = count(report?.counts?.[key]);
-    reasons.replaceChildren(...(list(report?.reasonCounts).length ? report.reasonCounts.map(item => add(el('li'), el('span', '', item.reason), el('strong', '', `${count(item.count)}건`))) : [el('li', 'muted', session ? '아직 보류 이유가 기록되지 않았습니다.' : '시험을 시작하면 반복 문제를 집계합니다.')]));
+    for (const [lane, value] of Object.entries(laneRows)) {
+      const totals = report?.laneCounts?.[lane];
+      value.textContent = `판단 ${count(totals?.evaluated)}건 · 모의 발행 ${count(totals?.wouldLaunch)}건 · 보류 ${count(totals?.held)}건`;
+    }
+    reasons.replaceChildren(...(list(report?.reasonCounts).length ? report.reasonCounts.map(item => add(el('li'), el('span', '', reasonText(item.reason)), el('strong', '', `${count(item.count)}건`))) : [el('li', 'muted', session ? '아직 보류 이유가 기록되지 않았습니다.' : '시험을 시작하면 반복 문제를 집계합니다.')]));
     readiness.textContent = { collecting: '관찰 중 · 표본을 모으고 있어요', needs_review: '문제 확인이 필요해요', ready_for_review: '기간 완료 · 피드백을 검토하세요' }[report?.readiness?.status] || '검토 준비';
     blockers.replaceChildren(...list(report?.readiness?.blockers).map(value => el('li', '', value)));
     coverage.textContent = report ? `관찰 ${count(report.coverage?.ticks)}회 · 가장 긴 관측 공백 ${count(report.coverage?.maxGapMinutes)}분` : '관찰 횟수와 누락 구간을 함께 확인합니다.';
+    const hotCoverage = report?.coverage?.hot;
+    if (hotCoverage) coverage.textContent += ` · 이번 핫 신호 검토 ${count(hotCoverage.evaluatedThisTick)} / ${count(hotCoverage.poolSize)}개${hotCoverage.rotating ? ' · 순환 검토 중' : ''}${hotCoverage.poolTruncated ? ' · 조회 범위 제한 있음' : ''}`;
     limitations.replaceChildren(...list(report?.limitations).map(value => el('li', '', value)));
     downloadButton.disabled = !session || exporting;
     downloadButton.textContent = exporting ? '전체 판단 기록을 모으는 중…' : '전체 검토 보고서 저장 ↓';
@@ -219,12 +278,27 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     if (action === 'start' && ![24, 48].includes(durationHours)) return;
     pending = true; const mine = ++epoch; draw();
     try {
-      const next = await api(`/api/paper-trial/${action}`, { method: 'POST', body: action === 'start' ? { durationHours } : {} });
+      const next = await api(`/api/paper-trial/${action}`, { method: 'POST', body: action === 'start' ? { durationHours, hotAuto: startHotAuto.checked } : {} });
       if (mine !== epoch) return;
       snapshot = next; selectedSession = ''; offset = 0; error = '';
       toast(action === 'start' ? `${durationHours}시간 모의 운영을 시작했습니다. 가스비는 발생하지 않습니다.` : '관찰을 종료했습니다. 피드백을 검토하세요. 가스비 차단은 유지됩니다.');
       onChange();
     } catch (failure) { if (mine === epoch) { error = failure.message || '모의 운영 상태를 변경하지 못했습니다.'; toast(error, true); } }
+    finally { if (mine === epoch) { pending = false; draw(); } }
+  }
+  async function configure() {
+    if (snapshot?.session?.status !== 'running' || !snapshot?.canManage || pending || loading || !configDirty || [...drafts.values()].some(value => value.pending)) return;
+    const requested = hotAuto.checked;
+    pending = true; const mine = ++epoch; draw();
+    try {
+      const next = await api('/api/paper-trial/config', { method: 'PATCH', body: { hotAuto: requested } });
+      if (mine !== epoch) return;
+      // Configuration changes must not move the current journal page or discard feedback drafts.
+      snapshot = offset === (next.pagination?.offset ?? 0) ? next : { ...next, decisions: snapshot.decisions, pagination: { ...snapshot.pagination, total: next.pagination?.total ?? snapshot.pagination?.total } };
+      configDirty = false; error = '';
+      toast(`핫레인 자동 모의 실행을 ${requested ? '켰습니다' : '껐습니다'}. 실제 발행 설정은 유지됩니다.`);
+      onChange();
+    } catch (failure) { if (mine === epoch) { error = failure.message || '모의 설정을 변경하지 못했습니다.'; toast(error, true); } }
     finally { if (mine === epoch) { pending = false; draw(); } }
   }
   async function exportReport() {
@@ -247,6 +321,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   }
   function reset() {
     epoch++; resetEpoch++; snapshot = null; loading = false; pending = false; exporting = false; error = ''; selectedSession = ''; renderedSession = null; offset = 0;
+    configDirty = false; configSession = null; startHotAuto.checked = true;
     rows.clear(); drafts.clear(); decisions.replaceChildren(); draw();
   }
   draw();
