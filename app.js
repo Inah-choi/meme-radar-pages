@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=15d80b0c1a8a850053c0';
-import {createBangerRadar} from './banger-radar.mjs?v=15d80b0c1a8a850053c0';
-import {createMyTokens} from './my-tokens.mjs?v=15d80b0c1a8a850053c0';
-import {createOriginBuy} from './origin-buy.mjs?v=15d80b0c1a8a850053c0';
-import {createPaperTrial} from './paper-trial.mjs?v=15d80b0c1a8a850053c0';
-import {API_ORIGIN} from './deployment-config.mjs?v=15d80b0c1a8a850053c0';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=15d80b0c1a8a850053c0';
+import {createRadarReview} from './radar-review.mjs?v=328baf15f6741e413138';
+import {createBangerRadar} from './banger-radar.mjs?v=328baf15f6741e413138';
+import {createMyTokens} from './my-tokens.mjs?v=328baf15f6741e413138';
+import {createOriginBuy} from './origin-buy.mjs?v=328baf15f6741e413138';
+import {createPaperTrial} from './paper-trial.mjs?v=328baf15f6741e413138';
+import {API_ORIGIN} from './deployment-config.mjs?v=328baf15f6741e413138';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=328baf15f6741e413138';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -750,11 +750,15 @@ function statCard(
 }
 
 async function refresh({ silent = false } = {}) {
-  if (!state.key || state.refreshing) return;
+  if (!state.key) return;
+  // The paper journal stays usable while unrelated dashboard work is pending.
+  if (state.page === "paper-trial") void paperTrial.refresh();
+  if (state.refreshing) return;
+  const paperPage = state.page === "paper-trial";
   state.refreshing = true;
   try {
     const results = await Promise.allSettled([
-      api("/api/overview"),
+      api(paperPage ? "/api/workspace-status" : "/api/overview"),
       state.page === "launches" ? api("/api/launches") : Promise.resolve(null),
     ]);
     if (results[0].status === "rejected") throw results[0].reason;
@@ -763,13 +767,14 @@ async function refresh({ silent = false } = {}) {
       number(state.overview?.policy?.version) > number(incoming.policy?.version)
     )
       incoming.policy = state.overview.policy;
-    state.overview = incoming;
-    state.launches = list(state.overview.launches);
+    state.overview = paperPage ? { ...state.overview, ...incoming } : incoming;
+    if (!paperPage) state.launches = list(state.overview.launches);
     if (results[1].status === "fulfilled" && results[1].value)
       state.launches = list(results[1].value.items);
     state.lastSync = new Date().toISOString();
     state.lastError = "";
-    renderOverview();
+    if (paperPage) renderWorkspaceStatus();
+    else renderOverview();
     await refreshDraftStatus();
     if (state.page === "radar") await fetchCandidates();
     if (state.page === "hot-lane") await fetchHotLane();
@@ -777,7 +782,6 @@ async function refresh({ silent = false } = {}) {
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
     if (state.page === "my-tokens") void myTokens.refresh();
     if (state.page === "origin-buy") void originBuy.refresh();
-    if (state.page === "paper-trial") void paperTrial.refresh();
     if (results[1].status === "rejected") throw results[1].reason;
   } catch (error) {
     state.lastError = `갱신 실패: ${error.message} 마지막 성공 데이터를 표시합니다.`;
@@ -788,12 +792,10 @@ async function refresh({ silent = false } = {}) {
     state.refreshing = false;
   }
 }
-function renderOverview() {
+function renderWorkspaceStatus() {
   const o = state.overview || {};
   const p = o.policy || {};
   const n = o.network || {};
-  const b = o.budget || {};
-  const collectors = list(o.collectors);
   $("#network-pill").textContent = (
     p.network ||
     n.network ||
@@ -811,9 +813,18 @@ function renderOverview() {
   $("#emergency-button").disabled = Boolean(p.emergencyStop);
   $("#sidebar-network").textContent =
     `${(p.network || n.network || "testnet").toUpperCase()} · ${n.chainId ? `Chain ${n.chainId}` : "설정 필요"}${n.dryRun ? " · DRY RUN" : ""}`;
-  $("#sidebar-balance").textContent = `${weiToEth(n.balanceWei)} ETH`;
+  $("#sidebar-balance").textContent = n.balanceWei == null
+    ? "잔액 미확인"
+    : `${weiToEth(n.balanceWei)} ETH`;
   $("#footer-sync").textContent =
     `${new Date(state.lastSync || Date.now()).toLocaleTimeString("ko-KR", { hour12: false })} 동기화`;
+  updateAlert();
+}
+function renderOverview() {
+  const o = state.overview || {};
+  const p = o.policy || {};
+  const collectors = list(o.collectors);
+  renderWorkspaceStatus();
   const good = collectors.filter(
     (c) =>
       !isXCollector(c) &&
@@ -3757,7 +3768,8 @@ $("#login-form").addEventListener("submit", async (event) => {
       state.apiOrigin = origin;
       state.key = key;
       updateApiConnectionLinks(origin);
-      const overview = await api("/api/overview");
+      const paperPage = location.hash === '#paper-trial';
+      const overview = await api(paperPage ? "/api/workspace-status" : "/api/overview");
       saveApiSession(sessionStorage, {apiOrigin: origin, key}, location.origin, API_ORIGIN);
       state.overview = overview;
       state.lastSync = new Date().toISOString();
@@ -3765,7 +3777,8 @@ $("#login-form").addEventListener("submit", async (event) => {
       $("#workspace").hidden = false;
       $("#login-error").textContent = "";
       $("#api-key").value = "";
-      renderOverview();
+      if (paperPage) renderWorkspaceStatus();
+      else renderOverview();
       navigate();
     } catch (error) {
       state.key = "";
