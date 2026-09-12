@@ -1,9 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=82745e095407c42b65c4';
-import {createBangerRadar} from './banger-radar.mjs?v=82745e095407c42b65c4';
-import {createMyTokens} from './my-tokens.mjs?v=82745e095407c42b65c4';
-import {createOriginBuy} from './origin-buy.mjs?v=82745e095407c42b65c4';
-import {API_ORIGIN} from './deployment-config.mjs?v=82745e095407c42b65c4';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=82745e095407c42b65c4';
+import {createRadarReview} from './radar-review.mjs?v=15d80b0c1a8a850053c0';
+import {createBangerRadar} from './banger-radar.mjs?v=15d80b0c1a8a850053c0';
+import {createMyTokens} from './my-tokens.mjs?v=15d80b0c1a8a850053c0';
+import {createOriginBuy} from './origin-buy.mjs?v=15d80b0c1a8a850053c0';
+import {createPaperTrial} from './paper-trial.mjs?v=15d80b0c1a8a850053c0';
+import {API_ORIGIN} from './deployment-config.mjs?v=15d80b0c1a8a850053c0';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=15d80b0c1a8a850053c0';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -52,6 +53,7 @@ const reviewRadar = createRadarReview({api,onOpenCandidate:openCandidate,onNavig
 const bangerRadar = createBangerRadar({api,onOpenCandidate:openCandidate,toast});
 const myTokens = createMyTokens({api, assetUrl: value => validUrl(value)});
 const originBuy = createOriginBuy({api, toast});
+const paperTrial = createPaperTrial({api, toast, onChange: () => refresh({ silent: true })});
 const labels = {
   radar: "밈 레이더",
   bangers: "뱅어 레이더",
@@ -60,6 +62,7 @@ const labels = {
   "hot-lane": "핫 레인",
   'my-tokens': "내 토큰",
   'origin-buy': "원본 매수",
+  'paper-trial': "모의 운영",
   collectors: "수집 소스",
   policy: "자동화 정책",
 };
@@ -660,6 +663,7 @@ function disconnect(notify = true) {
   bangerRadar.reset();
   myTokens.reset();
   originBuy.reset();
+  paperTrial.reset();
   forgetApiSession(sessionStorage, state.apiOrigin, location.origin);
   $("#workspace").hidden = true;
   $("#login-screen").hidden = false;
@@ -773,6 +777,7 @@ async function refresh({ silent = false } = {}) {
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
     if (state.page === "my-tokens") void myTokens.refresh();
     if (state.page === "origin-buy") void originBuy.refresh();
+    if (state.page === "paper-trial") void paperTrial.refresh();
     if (results[1].status === "rejected") throw results[1].reason;
   } catch (error) {
     state.lastError = `갱신 실패: ${error.message} 마지막 성공 데이터를 표시합니다.`;
@@ -3721,6 +3726,7 @@ function navigate() {
   if (state.page === "bangers" && state.key) bangerRadar.render();
   if (state.page === "my-tokens" && state.key) void myTokens.render();
   if (state.page === "origin-buy" && state.key) void originBuy.render();
+  if (state.page === "paper-trial" && state.key) void paperTrial.render();
   if (state.key) refresh({ silent: true });
 }
 function updateApiConnectionLinks(input = state.apiOrigin) {

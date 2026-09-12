@@ -1,0 +1,43 @@
+.paper-trial-status { margin: 0 0 18px; font-size: 12px; }
+.paper-trial-control { margin-bottom: 20px; border-color: var(--lime-muted); padding: 23px; }
+.paper-trial-control .panel-heading { align-items: flex-start; padding: 0; }
+.paper-trial-control h2 .pill { margin-left: 8px; vertical-align: middle; }
+.paper-trial-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 22px 0 18px; }
+.paper-trial-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.paper-trial-field label { margin: 0; font-size: 11px; color: var(--muted); }
+.paper-trial-field select { min-width: 185px; }
+.paper-trial-safety { color: var(--lime); font-size: 12px; line-height: 1.8; }
+.paper-trial-clock { font-size: 19px; font-variant-numeric: tabular-nums; margin: 22px 0 10px; }
+.paper-trial-progress { display: block; width: 100%; height: 7px; accent-color: var(--lime); border: 0; border-radius: 7px; background: var(--surface-raised); overflow: hidden; }
+.paper-trial-progress::-webkit-progress-bar { background: var(--surface-raised); }
+.paper-trial-progress::-webkit-progress-value { background: var(--lime); border-radius: 7px; }
+.paper-trial-progress::-moz-progress-bar { background: var(--lime); }
+.paper-trial-schedule { font-size: 11px; margin-bottom: 0; }
+.paper-trial-diagnostics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+.paper-trial-diagnostics > .panel { padding: 23px; }
+.paper-trial-diagnostics h2 { margin-bottom: 10px; font-size: 16px; }
+.paper-trial-diagnostics p { font-size: 12px; line-height: 1.75; }
+.paper-trial-reasons { padding: 0; list-style: none; margin: 18px 0 0; }
+.paper-trial-reasons li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.7; }
+.paper-trial-reasons strong { white-space: nowrap; color: var(--warning); font-variant-numeric: tabular-nums; }
+.paper-trial-blockers { padding-left: 18px; font-size: 12px; line-height: 1.8; color: var(--warning); }
+.paper-trial-limitations { padding-left: 18px; font-size: 11px; line-height: 1.8; color: var(--muted); }
+.paper-trial-next { margin: 14px 0 0; }
+.paper-trial-journal > .panel-heading { margin-bottom: 18px; padding: 0; }
+#paper-trial-history { max-width: 340px; }
+.paper-trial-decisions { display: grid; gap: 14px; }
+.paper-trial-decision { padding: 23px; }
+.paper-trial-decision-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.paper-trial-decision h3 { margin: 8px 0; font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.paper-trial-decision-time { font-size: 11px; white-space: nowrap; padding-top: 4px; }
+.paper-trial-presentation { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.paper-trial-rationale { font-size: 12px; line-height: 1.75; color: var(--warning); }
+.paper-trial-observation { font-size: 11px; line-height: 1.75; }
+.paper-trial-feedback { display: grid; grid-template-columns: minmax(175px, 1fr) minmax(220px, 2.5fr) auto; align-items: end; gap: 14px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.paper-trial-feedback select { min-width: 0; width: 100%; }
+.paper-trial-feedback textarea { width: 100%; min-height: 68px; resize: vertical; }
+.paper-trial-save { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding-bottom: 3px; }
+.paper-trial-feedback-status { font-size: 10px; line-height: 1.5; max-width: 170px; }
+.paper-trial-paging { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; margin: 20px 0; font-size: 11px; }
+@media (max-width: 1100px) { .paper-trial-feedback { grid-template-columns: 1fr 2fr; } .paper-trial-save { grid-column: 1 / -1; flex-direction: row; align-items: center; } .paper-trial-feedback-status { max-width: none; } }
+@media (max-width: 750px) { .paper-trial-diagnostics { grid-template-columns: 1fr; } .paper-trial-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .paper-trial-feedback { grid-template-columns: 1fr; } .paper-trial-journal > .panel-heading { flex-direction: column; align-items: stretch; } #paper-trial-history { max-width: 100%; } .paper-trial-clock { font-size: 16px; } }
