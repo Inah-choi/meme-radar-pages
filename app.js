@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=320a005c983e244d5fd9';
-import {createBangerRadar} from './banger-radar.mjs?v=320a005c983e244d5fd9';
-import {createMyTokens} from './my-tokens.mjs?v=320a005c983e244d5fd9';
-import {createOriginBuy} from './origin-buy.mjs?v=320a005c983e244d5fd9';
-import {createPaperTrial} from './paper-trial.mjs?v=320a005c983e244d5fd9';
-import {API_ORIGIN} from './deployment-config.mjs?v=320a005c983e244d5fd9';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=320a005c983e244d5fd9';
+import {createRadarReview} from './radar-review.mjs?v=4dc4a850ed69c3b865e5';
+import {createBangerRadar} from './banger-radar.mjs?v=4dc4a850ed69c3b865e5';
+import {createMyTokens} from './my-tokens.mjs?v=4dc4a850ed69c3b865e5';
+import {createOriginBuy} from './origin-buy.mjs?v=4dc4a850ed69c3b865e5';
+import {createPaperTrial} from './paper-trial.mjs?v=4dc4a850ed69c3b865e5';
+import {API_ORIGIN} from './deployment-config.mjs?v=4dc4a850ed69c3b865e5';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=4dc4a850ed69c3b865e5';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -595,10 +595,11 @@ async function busy(button, handler) {
   }
 }
 async function api(path, options = {}) {
+  const {responseType, ...requestOptions} = options;
   const requestOrigin = state.apiOrigin, requestKey = state.key;
   const target = apiRequestUrl(path, requestOrigin || location.origin, location.origin);
   const headers = {
-    Accept: "application/json",
+    Accept: responseType === 'blob' ? 'image/png' : "application/json",
     ...(state.key ? { Authorization: `Bearer ${state.key}` } : {}),
     ...(options.body ? { "Content-Type": "application/json" } : {}),
     ...options.headers,
@@ -606,7 +607,7 @@ async function api(path, options = {}) {
   let response;
   try {
     response = await fetch(target, {
-      ...options,
+      ...requestOptions,
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: options.signal || AbortSignal.timeout(30_000),
@@ -620,7 +621,7 @@ async function api(path, options = {}) {
         : "서버에 연결할 수 없습니다. 서버와 네트워크 상태를 확인하세요.",
     );
   }
-  const result = await response.json().catch(() => ({}));
+  const result = response.ok && responseType === 'blob' ? await response.blob() : await response.json().catch(() => ({}));
   if (state.apiOrigin !== requestOrigin || state.key !== requestKey)
     throw new Error('서버 연결이 변경되어 이전 요청 결과를 무시했습니다.');
   if (!response.ok) {
@@ -651,6 +652,8 @@ async function api(path, options = {}) {
     if(result.error?.details!==undefined)error.details=result.error.details;
     throw error;
   }
+  if(responseType === 'blob' && (result.type !== 'image/png' || result.size > 10 * 1024 * 1024))
+    throw new Error('모의 이미지 형식을 확인할 수 없습니다.');
   return result;
 }
 function disconnect(notify = true) {

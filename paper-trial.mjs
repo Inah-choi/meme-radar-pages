@@ -6,6 +6,8 @@ const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(val
 const statuses = { running: '모의 운영 중', completed: '관찰 기간 완료', stopped: '관찰 중지됨' };
 const verdicts = { good: '판단이 맞아요', bad: '판단이 틀렸어요', missed: '발행 기회를 놓쳤어요', unsure: '더 지켜볼게요' };
 const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시', core_author: '유명인 원문 즉시 모의 발행' };
+const preparationLabels = {queued:'이름·설명 생성 대기',generating_text:'이름·설명 생성 중',text_ready:'이름·설명 준비 완료 · 이미지 생성 대기',
+  generating_image:'이름·설명 준비 완료 · 이미지 생성 중',ready:'발행 자료 준비 완료',retry_wait:'발행 자료 재시도 대기',failed:'발행 자료 생성 실패',context_missing:'답글·인용 원문 맥락 확인 필요'};
 const coreAuthorsOf = simulation => list(simulation?.coreAuthors).filter(author => typeof author?.handle === 'string' && /^@?[A-Za-z0-9_]{1,15}$/.test(author.handle) && typeof author.authorId === 'string' && /^[1-9]\d{0,29}$/.test(author.authorId));
 const targetLabels = { target_observed_after_decision: '판단 전 $1M 미만 → 이후 $1M 관측', already_at_target_before_decision: '판단 전에 이미 $1M',
   pre_decision_hit_received_late: '판단 전 $1M 자료를 늦게 수신', post_decision_target_baseline_unknown: '이후 $1M 관측·판단 전 기준값 없음',
@@ -53,7 +55,7 @@ function downloadJson(payload) {
   anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function createPaperTrial({ api, document = globalThis.document, toast = () => {}, onChange = () => {}, download = downloadJson }) {
+export function createPaperTrial({ api, document = globalThis.document, toast = () => {}, onChange = () => {}, download = downloadJson, objectUrls = globalThis.URL }) {
   const root = document.querySelector('#paper-trial-root');
   const el = (tag, className = '', value = '') => { const node = document.createElement(tag); node.className = className; if (value !== '') node.textContent = value; return node; };
   const add = (parent, ...children) => { parent.append(...children.filter(Boolean)); return parent; };
@@ -61,6 +63,25 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   let snapshot = null, loading = false, pending = false, exporting = false, error = '', epoch = 0, resetEpoch = 0, selectedSession = '', renderedSession = null, offset = 0;
   let configDirty = false, configSession = null, selectionSession = null;
   const drafts = new Map(), rows = new Map(), selectionRows = new Map();
+  const artwork = new Map();
+  function preparationImage(preparation) {
+    if(!preparation?.image||preparation.status!=='ready') return null;
+    const expected=`/api/paper-trial/metadata/${preparation.id}/image`;
+    if(!/^[0-9a-f-]{36}$/i.test(preparation.id??'')||preparation.image.previewUrl!==expected||!/^[a-f0-9]{64}$/.test(preparation.image.sha256??''))
+      return {error:'이미지 주소를 확인할 수 없습니다.'};
+    const key=`${preparation.id}:${preparation.image.sha256}`;
+    if(artwork.has(key)) return artwork.get(key);
+    const entry={key,pending:true,url:null,error:''},mine=resetEpoch;artwork.set(key,entry);
+    Promise.resolve().then(()=>api(expected,{responseType:'blob'})).then(blob=>{
+      if(mine!==resetEpoch||artwork.get(key)!==entry)return;
+      if(!blob||blob.type!=='image/png'||blob.size>10*1024*1024)throw new Error('모의 이미지 형식을 확인할 수 없습니다.');
+      entry.url=objectUrls.createObjectURL(blob);entry.pending=false;entry.error='';draw();
+    }).catch(failure=>{
+      if(mine!==resetEpoch||artwork.get(key)!==entry)return;
+      entry.pending=false;entry.error=failure.message||'모의 이미지를 불러오지 못했습니다.';draw();
+    });
+    return entry;
+  }
   const heading = add(el('div', 'page-heading'), add(el('div'), el('div', 'eyebrow', 'PAPER TRIAL · OBSERVE, THEN REVIEW'), el('h1', '', '모의 운영'), el('p', 'muted', '하루 이틀 동안 발행 판단을 기록하고, 무엇이 잘못됐는지 피드백하세요.')));
   const refreshButton = button('새로고침 ↻', 'paper-trial-refresh');
   refreshButton.addEventListener('click', () => refresh({ force: true })); heading.append(refreshButton);
@@ -122,10 +143,11 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const readiness = el('h2', '', '검토 준비'); readiness.id = 'paper-trial-readiness';
   const blockers = el('ul', 'paper-trial-blockers'); blockers.id = 'paper-trial-blockers';
   const coverage = el('p', 'muted'); coverage.id = 'paper-trial-coverage';
+  const operations = el('p', 'muted'); operations.id = 'paper-trial-operations';
   const limitations = el('ul', 'paper-trial-limitations'); limitations.id = 'paper-trial-limitations';
   const downloadButton = button('전체 검토 보고서 저장 ↓', 'paper-trial-download'); downloadButton.title = '전체 집계와 모든 페이지의 판단·피드백을 JSON으로 저장합니다.';
   downloadButton.addEventListener('click', exportReport);
-  add(readinessPanel, readiness, blockers, coverage, limitations, downloadButton, el('p', 'paper-trial-next muted', '관찰 종료 후에도 가스비 차단이 유지됩니다. 피드백을 검토하고 문제를 수정한 뒤, 관리자가 별도로 실제 운영을 설정해야 합니다.'));
+  add(readinessPanel, readiness, blockers, coverage, operations, limitations, downloadButton, el('p', 'paper-trial-next muted', '관찰 종료 후에도 가스비 차단이 유지됩니다. 피드백을 검토하고 문제를 수정한 뒤, 관리자가 별도로 실제 운영을 설정해야 합니다.'));
   add(diagnostics, reasonsPanel, readinessPanel);
 
   const selectionPanel = el('section', 'paper-trial-selection'); selectionPanel.id = 'paper-trial-selection';
@@ -175,6 +197,15 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     const title = el('h3');
     const when = el('span', 'muted paper-trial-decision-time');
     const presentation = el('p', 'paper-trial-presentation');
+    const preparationStatus=el('p','muted paper-trial-preparation-status');preparationStatus.setAttribute('role','status');
+    const preparationHistory=el('p','muted paper-trial-preparation-history');
+    const preview=el('img','paper-trial-preparation-image');preview.width=256;preview.height=256;preview.loading='lazy';preview.decoding='async';preview.hidden=true;
+    const imageStatus=el('p','muted paper-trial-image-status');imageStatus.setAttribute('role','status');
+    const imageRetry=button('이미지 다시 불러오기',`paper-image-retry-${item.id}`);
+    preview.addEventListener('error',()=>{const prep=item.preparation,key=prep?.image?`${prep.id}:${prep.image.sha256}`:null,entry=key?artwork.get(key):null;
+      if(entry?.url){objectUrls.revokeObjectURL(entry.url);entry.url=null;entry.error='모의 이미지를 표시하지 못했습니다.';draw();}});
+    imageRetry.addEventListener('click',()=>{const prep=item.preparation,key=prep?.image?`${prep.id}:${prep.image.sha256}`:null;
+      if(key){const previous=artwork.get(key);if(previous?.url)objectUrls.revokeObjectURL(previous.url);artwork.delete(key);draw();}});
     const sourceExcerpt = el('p', 'paper-trial-source-excerpt');
     const rationale = el('p', 'paper-trial-rationale');
     const observation = el('p', 'muted paper-trial-observation');
@@ -217,7 +248,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       finally { state.pending = false; if (sessionEpoch === epoch) draw(); }
     });
     add(form, add(el('div', 'paper-trial-field'), choiceLabel, choice), add(el('div', 'paper-trial-field paper-trial-note-field'), noteLabel, note), add(el('div', 'paper-trial-save'), save, feedbackStatus));
-    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, sourceExcerpt, rationale, observation, marketObservation, sourceLink, form);
+    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation,preparationStatus,preparationHistory,preview,imageStatus,imageRetry, sourceExcerpt, rationale, observation, marketObservation, sourceLink, form);
     function update(next = item) {
       item = next;
       const issued = item.decision === 'would_launch', initial = item.snapshot ?? {}, later = item.latestObservation;
@@ -228,12 +259,23 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       sourceExcerpt.hidden = !sourceBody;
       outcome.textContent = issued ? '모의 발행' : '보류'; outcome.className = `pill ${issued ? 'success' : 'warning'}`;
       lane.textContent = `${logicalLane === 'challenger' ? '뉴스·밈 비교 가설' : laneLabels[logicalLane] || logicalLane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
-      title.textContent = item.title || item.candidateId || '이름 미확인'; when.textContent = date(item.createdAt);
-      const token = initial.presentation ?? {};
+      const preparation=item.preparation,token=preparation?.proposal??initial.presentation??{};
+      title.textContent = preparation?.proposal?.name || item.title || item.candidateId || '이름 미확인'; when.textContent = date(item.createdAt);
       presentation.textContent = [token.name, token.symbol ? `$${token.symbol}` : null, token.description].filter(Boolean).join(' · '); presentation.hidden = !presentation.textContent;
-      if (logicalLane === 'core_author' && (initial.metadataStatus === 'pending' || token.metadataStatus === 'pending')) {
+      if (!preparation && logicalLane === 'core_author' && (initial.metadataStatus === 'pending' || token.metadataStatus === 'pending')) {
         presentation.textContent = `${presentation.textContent ? `${presentation.textContent} · ` : ''}이름·이미지 준비 전`; presentation.hidden = false;
       }
+      preparationStatus.textContent=preparation?[preparationLabels[preparation.status]||'발행 자료 상태 확인 필요',
+        preparation.proposal&&['failed','retry_wait','context_missing'].includes(preparation.status)?'생성된 이름·설명은 유지됩니다.':null,
+        preparation.retryAt?`다음 재시도 ${date(preparation.retryAt)}`:null,preparation.error?`오류: ${String(preparation.error).slice(0,300)}`:null].filter(Boolean).join(' · '):'';
+      preparationStatus.hidden=!preparation;
+      preparationHistory.textContent=preparation?.postTrialEnrichment||preparation?.completedAfterTrial?'관찰 종료 후 만든 발행 자료 · 당시 판단과 성과에는 포함하지 않습니다.':'';
+      preparationHistory.hidden=!preparationHistory.textContent;
+      const image=preparationImage(preparation);
+      preview.hidden=!image?.url;preview.alt=`${token.name||'모의 토큰'} 이미지`;
+      if(image?.url)preview.src=image.url;else preview.removeAttribute?.('src');
+      imageStatus.textContent=image?.error|| (image?.pending?'모의 이미지 불러오는 중…':'');imageStatus.hidden=!imageStatus.textContent;
+      imageRetry.hidden=!image?.error||!image.key;
       rationale.textContent = list(item.reasons).length ? list(item.reasons).map(reasonText).join(' · ') : issued ? '선별 조건 통과 · 실제 발행은 하지 않았습니다.' : '보류 이유 미기록';
       if (logicalLane === 'core_author' && issued) rationale.textContent = '설정한 계정의 원문을 확인해 모의 발행 의사를 기록했습니다.';
       const cautions = [...new Set(list(initial.hotQuality?.cautions).filter(value => typeof value === 'string' && value.trim()))];
@@ -325,6 +367,9 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     coverage.textContent = report ? `관찰 ${count(report.coverage?.ticks)}회 · 가장 긴 관측 공백 ${count(report.coverage?.maxGapMinutes)}분` : '관찰 횟수와 누락 구간을 함께 확인합니다.';
     const hotCoverage = report?.coverage?.hot;
     if (hotCoverage) coverage.textContent += ` · 이번 핫 신호 검토 ${count(hotCoverage.evaluatedThisTick)} / ${count(hotCoverage.poolSize)}개${hotCoverage.rotating ? ' · 순환 검토 중' : ''}${hotCoverage.poolTruncated ? ' · 조회 범위 제한 있음' : ''}`;
+    const measured = snapshot?.operations, latency = measured?.receiptToDecision;
+    operations.hidden = !measured;
+    operations.textContent = measured ? `유명인 원문 수신→기록 p95 ${number(latency?.p95Ms) === null ? '측정 전' : `${(latency.p95Ms / 1000).toFixed(2)}초`} / 목표 2초 · ${count(latency?.samples)}건${latency?.evaluation === 'insufficient_samples' ? ' · 표본 수집 중' : latency?.evaluation === 'over_target' ? ' · 지연 확인 필요' : ''} · 제작 연결 누락 ${count(measured.missingPreparationCount)}건 · 중복 발행 ${count(measured.duplicateIssuanceCount)}건 · 제작 대기·진행 ${count(measured.unfinishedJobs)}건` : '';
     limitations.replaceChildren(...list(report?.limitations).map(value => el('li', '', value)));
     downloadButton.disabled = !session || exporting;
     downloadButton.textContent = exporting ? '전체 판단 기록을 모으는 중…' : '전체 검토 보고서 저장 ↓';
@@ -416,6 +461,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   function reset() {
     epoch++; resetEpoch++; snapshot = null; loading = false; pending = false; exporting = false; error = ''; selectedSession = ''; renderedSession = null; offset = 0;
     configDirty = false; configSession = null; selectionSession = null; startHotAuto.checked = true;
+    for(const entry of artwork.values())if(entry.url)objectUrls.revokeObjectURL(entry.url);artwork.clear();
     rows.clear(); selectionRows.clear(); drafts.clear(); decisions.replaceChildren(); selectionDecisions.replaceChildren(); draw();
   }
   draw();
