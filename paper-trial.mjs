@@ -5,7 +5,8 @@ const count = value => number(value) === null ? '—' : value.toLocaleString('ko
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
 const statuses = { running: '모의 운영 중', completed: '관찰 기간 완료', stopped: '관찰 중지됨' };
 const verdicts = { good: '판단이 맞아요', bad: '판단이 틀렸어요', missed: '발행 기회를 놓쳤어요', unsure: '더 지켜볼게요' };
-const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시' };
+const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시', core_author: '유명인 원문 즉시 모의 발행' };
+const coreAuthorsOf = simulation => list(simulation?.coreAuthors).filter(author => typeof author?.handle === 'string' && /^@?[A-Za-z0-9_]{1,15}$/.test(author.handle) && typeof author.authorId === 'string' && /^[1-9]\d{0,29}$/.test(author.authorId));
 const targetLabels = { target_observed_after_decision: '판단 전 $1M 미만 → 이후 $1M 관측', already_at_target_before_decision: '판단 전에 이미 $1M',
   pre_decision_hit_received_late: '판단 전 $1M 자료를 늦게 수신', post_decision_target_baseline_unknown: '이후 $1M 관측·판단 전 기준값 없음',
   no_post_decision_observation: '판단 후 시장 관측 없음', fdv_only_target_observed: 'FDV만 $1M 관측', below_target_observed: '$1M 미만 관측', market_cap_unavailable: '시총 자료 없음' };
@@ -31,6 +32,11 @@ const reasonLabels = {
   FLASH_HOUR_CAP: '플래시 시간당 한도 도달', FLASH_DAY_CAP: '플래시 일일 한도 도달', FLASH_KEY_COOLDOWN: '동일 소재 재요청 대기',
   HOT_PROMOTIONAL_TAG_CAMPAIGN: '해시태그 홍보 캠페인', HOT_FAN_CAMPAIGN: '팬 참여·투표 캠페인',
   HOT_TOKEN_PROMOTION: '기존 토큰 매수 홍보', HOT_CAMPAIGN_PROMOTION: '선거·참여 홍보 캠페인',
+  CORE_AUTHOR_PIN_MISMATCH: '계정 ID 확인 불일치', CORE_AUTHOR_REPOST_EXCLUDED: '단순 재게시 제외',
+  CORE_AUTHOR_OWN_COMMENTARY_REQUIRED: '답글·인용에 작성자 본문 없음', CORE_AUTHOR_SOURCE_STALE: '게시 후 30분이 지난 글',
+  CORE_AUTHOR_SOURCE_TIME_INVALID: '원문 시각 확인 필요', CORE_AUTHOR_BEFORE_ACTIVATION: '설정 적용 전 게시된 글',
+  CORE_AUTHOR_IMMUTABLE_OBSERVATION_REQUIRED: '보존된 원문 관측 확인 필요', CORE_AUTHOR_PUBLIC_SOURCE_REQUIRED: '공개 원문 확인 필요',
+  CORE_AUTHOR_ORIGINAL_POST_REQUIRED: '원문 게시물 확인 필요', CORE_AUTHOR_POST_IDENTITY_REQUIRED: '원문 게시물 ID 확인 필요', CORE_AUTHOR_DEMO_SOURCE: '예시 데이터는 대상에서 제외',
 };
 const reasonText = value => Object.hasOwn(reasonLabels, value) ? `${reasonLabels[value]} (${value})` : value;
 export function formatTrialHours(value) {
@@ -77,14 +83,18 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   add(controls, add(el('div', 'paper-trial-field'), durationLabel, duration), startHotLabel, startButton, stopButton);
   const simulationPanel = el('div', 'paper-trial-simulation');
   const simulationStatus = el('p', 'paper-trial-simulation-status'); simulationStatus.id = 'paper-trial-simulation-status';
+  const coreStatus = el('p', 'paper-trial-simulation-status'); coreStatus.id = 'paper-trial-core-status';
   const configControls = el('div', 'paper-trial-config-controls');
   const hotAuto = el('input'); hotAuto.type = 'checkbox'; hotAuto.id = 'paper-trial-hot-auto';
   hotAuto.addEventListener('change', () => { configDirty = true; draw(); });
   const hotAutoLabel = add(el('label', 'paper-trial-checkbox'), hotAuto, el('span', '', '핫레인 자동 발행도 모의 실행'));
+  const coreAuto = el('input'); coreAuto.type = 'checkbox'; coreAuto.id = 'paper-trial-core-auto';
+  coreAuto.addEventListener('change', () => { configDirty = true; draw(); });
+  const coreAutoLabel = add(el('label', 'paper-trial-checkbox'), coreAuto, el('span', '', '유명인 원문 즉시 모의 발행'));
   const applyConfigButton = button('모의 설정 적용', 'paper-trial-config-apply', 'button small subtle');
   applyConfigButton.addEventListener('click', configure);
-  add(configControls, hotAutoLabel, applyConfigButton);
-  add(simulationPanel, simulationStatus, configControls, el('p', 'muted', '모의 판단에만 적용합니다. 실제 자동 발행 설정과 가스비 차단은 유지됩니다. 변경 전 기록도 그대로 보관합니다.'));
+  add(configControls, hotAutoLabel, coreAutoLabel, applyConfigButton);
+  add(simulationPanel, simulationStatus, coreStatus, configControls, el('p', 'muted', '모의 판단에만 적용합니다. 실제 자동 발행 설정과 가스비 차단은 유지됩니다. 변경 전 기록도 그대로 보관합니다.'));
   const safety = el('p', 'paper-trial-safety'); safety.id = 'paper-trial-safety';
   const clock = el('p', 'paper-trial-clock'); clock.id = 'paper-trial-clock';
   const progress = el('progress', 'paper-trial-progress'); progress.max = 100; progress.value = 0; progress.setAttribute('aria-label', '모의 운영 관찰 시간');
@@ -165,6 +175,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     const title = el('h3');
     const when = el('span', 'muted paper-trial-decision-time');
     const presentation = el('p', 'paper-trial-presentation');
+    const sourceExcerpt = el('p', 'paper-trial-source-excerpt');
     const rationale = el('p', 'paper-trial-rationale');
     const observation = el('p', 'muted paper-trial-observation');
     const marketObservation = el('p', 'muted paper-trial-observation');
@@ -206,20 +217,30 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       finally { state.pending = false; if (sessionEpoch === epoch) draw(); }
     });
     add(form, add(el('div', 'paper-trial-field'), choiceLabel, choice), add(el('div', 'paper-trial-field paper-trial-note-field'), noteLabel, note), add(el('div', 'paper-trial-save'), save, feedbackStatus));
-    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, rationale, observation, marketObservation, sourceLink, form);
+    add(article, add(el('div', 'paper-trial-decision-heading'), add(el('div'), outcome, lane, title), when), presentation, sourceExcerpt, rationale, observation, marketObservation, sourceLink, form);
     function update(next = item) {
       item = next;
       const issued = item.decision === 'would_launch', initial = item.snapshot ?? {}, later = item.latestObservation;
+      const logicalLane = initial.route === 'core_author' ? 'core_author' : item.lane;
+      const sourceBody = logicalLane === 'core_author' ? String(initial.source?.text || initial.source?.title || '') : '';
+      const excerptCharacters = [...sourceBody];
+      sourceExcerpt.textContent = sourceBody ? `원문: ${excerptCharacters.slice(0, 600).join('')}${excerptCharacters.length > 600 ? '…' : ''}` : '';
+      sourceExcerpt.hidden = !sourceBody;
       outcome.textContent = issued ? '모의 발행' : '보류'; outcome.className = `pill ${issued ? 'success' : 'warning'}`;
-      lane.textContent = `${item.lane === 'challenger' ? '뉴스·밈 비교 가설' : laneLabels[item.lane] || item.lane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
+      lane.textContent = `${logicalLane === 'challenger' ? '뉴스·밈 비교 가설' : laneLabels[logicalLane] || logicalLane || '경로 미기록'}${number(initial.simulation?.revision) !== null ? ` · 설정 ${initial.simulation.revision}차` : ''}`;
       title.textContent = item.title || item.candidateId || '이름 미확인'; when.textContent = date(item.createdAt);
       const token = initial.presentation ?? {};
       presentation.textContent = [token.name, token.symbol ? `$${token.symbol}` : null, token.description].filter(Boolean).join(' · '); presentation.hidden = !presentation.textContent;
+      if (logicalLane === 'core_author' && (initial.metadataStatus === 'pending' || token.metadataStatus === 'pending')) {
+        presentation.textContent = `${presentation.textContent ? `${presentation.textContent} · ` : ''}이름·이미지 준비 전`; presentation.hidden = false;
+      }
       rationale.textContent = list(item.reasons).length ? list(item.reasons).map(reasonText).join(' · ') : issued ? '선별 조건 통과 · 실제 발행은 하지 않았습니다.' : '보류 이유 미기록';
+      if (logicalLane === 'core_author' && issued) rationale.textContent = '설정한 계정의 원문을 확인해 모의 발행 의사를 기록했습니다.';
       const cautions = [...new Set(list(initial.hotQuality?.cautions).filter(value => typeof value === 'string' && value.trim()))];
       if (cautions.length) rationale.textContent += ` · 검토 근거: ${cautions.join(' · ')}`;
       observation.textContent = `판단 당시 점수 ${count(initial.score)} · 작성자 ${count(initial.uniqueAuthors)}명 · 독립 출처 ${count(initial.independentSources)}개`;
       if (later) observation.textContent += ` → 최근 점수 ${count(later.score)} (${change(later.scoreDelta)}) · 작성자 ${count(later.uniqueAuthors)}명 (${change(later.authorDelta)}) · ${date(later.observedAt)}${later.stale ? ' · 오래된 관측' : ''}`;
+      if (logicalLane === 'core_author') observation.textContent = `${initial.source?.author || '작성자 미확인'} · 게시 ${date(initial.source?.publishedAt)} · 관측 ${date(initial.source?.observedAt)} · 수신 ${date(initial.source?.receivedAt)} · 판단 ${date(initial.decisionAt || item.createdAt)}${initial.replay ? ' · 활성 시점의 최근 원문 재생' : ''}`;
       if (item.lane === 'challenger') {
         observation.textContent = `원문 ${date(initial.source?.publishedAt)} · 수신 ${date(initial.source?.receivedAt)} · 당시 조회 ${count(initial.attention?.views)} / 좋아요 ${count(initial.attention?.likes)} · 초기 반응만 확인`;
         observation.textContent += list(item.followups).map(f => ` · ${f.minutes}분 후: ${f.status === 'observed' ? `조회 ${count(f.metrics?.views)} / 좋아요 ${count(f.metrics?.likes)}${f.delayMinutes > 0 ? ` (${f.delayMinutes}분 늦은 관측)` : ''}` : f.status === 'waiting' ? '대기' : f.status === 'ended_before_checkpoint' ? '회차 종료로 관찰하지 못함' : '새 관측 없음'}`).join('');
@@ -254,13 +275,17 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     stopButton.disabled = !active || snapshot?.canManage !== true || pending || loading || savingFeedback; stopButton.hidden = !active;
     const simulation = snapshot?.simulation ?? report?.simulation;
     if (configSession !== session?.id) { configSession = session?.id; configDirty = false; }
-    if (!configDirty) hotAuto.checked = simulation?.hotAuto === true;
+    if (!configDirty) { hotAuto.checked = simulation?.hotAuto === true; coreAuto.checked = simulation?.coreAuto === true; }
     hotAuto.disabled = !active || snapshot?.canManage !== true || pending || loading || savingFeedback;
+    const coreAuthors = coreAuthorsOf(simulation);
+    coreAuto.disabled = hotAuto.disabled || (!coreAuthors.length && simulation?.coreAuto !== true);
     configControls.hidden = !active;
-    applyConfigButton.disabled = hotAuto.disabled || !configDirty || hotAuto.checked === simulation?.hotAuto;
+    const configChanged = hotAuto.checked !== (simulation?.hotAuto === true) || coreAuto.checked !== (simulation?.coreAuto === true);
+    applyConfigButton.disabled = hotAuto.disabled || !configDirty || !configChanged || (coreAuto.checked && !coreAuthors.length);
     simulationStatus.textContent = session
-      ? `핫레인 자동 모의 실행 ${simulation?.hotAuto === true ? '켜짐' : simulation?.hotAuto === false ? '꺼짐' : '설정 미확인'}${number(simulation?.revision) !== null ? ` · 설정 ${simulation.revision}차` : ''}${simulation?.effectiveFrom ? ` · 적용 ${date(simulation.effectiveFrom)}` : ''}${configDirty && hotAuto.checked !== simulation?.hotAuto ? ' · 적용하지 않은 변경' : ''}`
+      ? `핫레인 자동 모의 실행 ${simulation?.hotAuto === true ? '켜짐' : simulation?.hotAuto === false ? '꺼짐' : '설정 미확인'}${number(simulation?.revision) !== null ? ` · 설정 ${simulation.revision}차` : ''}${simulation?.effectiveFrom ? ` · 적용 ${date(simulation.effectiveFrom)}` : ''}${configDirty && configChanged ? ' · 적용하지 않은 변경' : ''}`
       : '핫레인 자동 발행 판단도 함께 기록하도록 기본 설정되어 있습니다.';
+    coreStatus.textContent = `유명인 원문 즉시 모의 발행 ${simulation?.coreAuto === true ? '켜짐' : '꺼짐'} · ${coreAuthors.length ? `대상 ${coreAuthors.map(author => `@${author.handle.replace(/^@/, '')}`).join(', ')}` : '계정 설정 필요'}${simulation?.coreEffectiveFrom ? ` · 적용 ${date(simulation.coreEffectiveFrom)}` : ''} · 모의 발행 ${count(report?.laneCounts?.core_author?.wouldLaunch)}건`;
     const lock = snapshot?.safety?.liveLocked;
     safety.textContent = lock === true ? '가스비 차단 중 · 모의 운영이 끝나도 실제 발행·매수로 자동 전환되지 않습니다.' : '시작하면 실제 발행·매수를 차단하고 모의 판단만 기록합니다.';
     if (snapshot?.canManage === false) safety.textContent += ' 시작과 종료는 관리자만 할 수 있습니다.';
@@ -344,7 +369,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     if (action === 'start' && ![24, 48].includes(durationHours)) return;
     pending = true; const mine = ++epoch; draw();
     try {
-      const next = await api(`/api/paper-trial/${action}`, { method: 'POST', body: action === 'start' ? { durationHours, hotAuto: startHotAuto.checked } : {} });
+      const next = await api(`/api/paper-trial/${action}`, { method: 'POST', body: action === 'start' ? { durationHours, hotAuto: startHotAuto.checked, coreAuto: false } : {} });
       if (mine !== epoch) return;
       snapshot = next; selectedSession = ''; offset = 0; error = '';
       toast(action === 'start' ? `${durationHours}시간 모의 운영을 시작했습니다. 가스비는 발생하지 않습니다.` : '관찰을 종료했습니다. 피드백을 검토하세요. 가스비 차단은 유지됩니다.');
@@ -354,15 +379,16 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   }
   async function configure() {
     if (snapshot?.session?.status !== 'running' || !snapshot?.canManage || pending || loading || !configDirty || [...drafts.values()].some(value => value.pending)) return;
-    const requested = hotAuto.checked;
+    const requested = { hotAuto: hotAuto.checked, coreAuto: coreAuto.checked };
+    if (requested.coreAuto && !coreAuthorsOf(snapshot?.simulation ?? snapshot?.report?.simulation).length) return;
     pending = true; const mine = ++epoch; draw();
     try {
-      const next = await api('/api/paper-trial/config', { method: 'PATCH', body: { hotAuto: requested } });
+      const next = await api('/api/paper-trial/config', { method: 'PATCH', body: requested });
       if (mine !== epoch) return;
       // Configuration changes must not move the current journal page or discard feedback drafts.
       snapshot = offset === (next.pagination?.offset ?? 0) ? next : { ...next, decisions: snapshot.decisions, pagination: { ...snapshot.pagination, total: next.pagination?.total ?? snapshot.pagination?.total } };
       configDirty = false; error = '';
-      toast(`핫레인 자동 모의 실행을 ${requested ? '켰습니다' : '껐습니다'}. 실제 발행 설정은 유지됩니다.`);
+      toast('모의 설정을 적용했습니다. 실제 발행 설정은 유지됩니다.');
       onChange();
     } catch (failure) { if (mine === epoch) { error = failure.message || '모의 설정을 변경하지 못했습니다.'; toast(error, true); } }
     finally { if (mine === epoch) { pending = false; draw(); } }
