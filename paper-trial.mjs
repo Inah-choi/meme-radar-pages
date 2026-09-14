@@ -6,8 +6,8 @@ const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(val
 const statuses = { running: '모의 운영 중', completed: '관찰 기간 완료', stopped: '관찰 중지됨' };
 const verdicts = { good: '판단이 맞아요', bad: '판단이 틀렸어요', missed: '발행 기회를 놓쳤어요', unsure: '더 지켜볼게요' };
 const laneLabels = { automatic: '일반 자동 발행', hot: '핫레인', flash: '핫레인 자동 플래시', core_author: '유명인 원문 즉시 모의 발행' };
-const preparationLabels = {queued:'이름·설명 생성 대기',generating_text:'이름·설명 생성 중',text_ready:'이름·설명 준비 완료 · 이미지 생성 대기',
-  generating_image:'이름·설명 준비 완료 · 이미지 생성 중',ready:'발행 자료 준비 완료',retry_wait:'발행 자료 재시도 대기',failed:'발행 자료 생성 실패',context_missing:'답글·인용 원문 맥락 확인 필요'};
+const preparationLabels = {queued:'이름·설명 생성 대기',generating_text:'이름·설명 생성 중',text_ready:'이름·설명 준비 완료 · 이미지 준비 대기',
+  generating_image:'이름·설명 준비 완료 · 이미지 준비 중',ready:'발행 자료 준비 완료',retry_wait:'발행 자료 재시도 대기',failed:'발행 자료 생성 실패',context_missing:'답글·인용 원문 맥락 확인 필요'};
 const coreAuthorsOf = simulation => list(simulation?.coreAuthors).filter(author => typeof author?.handle === 'string' && /^@?[A-Za-z0-9_]{1,15}$/.test(author.handle) && typeof author.authorId === 'string' && /^[1-9]\d{0,29}$/.test(author.authorId));
 const targetLabels = { target_observed_after_decision: '판단 전 $1M 미만 → 이후 $1M 관측', already_at_target_before_decision: '판단 전에 이미 $1M',
   pre_decision_hit_received_late: '판단 전 $1M 자료를 늦게 수신', post_decision_target_baseline_unknown: '이후 $1M 관측·판단 전 기준값 없음',
@@ -64,6 +64,8 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   let configDirty = false, configSession = null, selectionSession = null;
   const drafts = new Map(), rows = new Map(), selectionRows = new Map();
   const artwork = new Map();
+  let rapidSnapshot=null,rapidError='',rapidRequest=null,rapidAbort=null,rapidEpoch=0,rapidSession='',rapidRenderSignature='';
+  const rapidArtwork=new Map();
   function preparationImage(preparation) {
     if(!preparation?.image||preparation.status!=='ready') return null;
     const expected=`/api/paper-trial/metadata/${preparation.id}/image`;
@@ -176,7 +178,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const journal = el('section', 'paper-trial-journal'); journal.setAttribute('aria-label', '모의 발행 판단과 피드백');
   const journalHeading = el('div', 'panel-heading');
   const history = el('select'); history.id = 'paper-trial-history'; history.setAttribute('aria-label', '모의 운영 기록 선택');
-  history.addEventListener('change', () => { selectedSession = history.value; offset = 0; return refresh({ force: true }); });
+  history.addEventListener('change', () => { selectedSession = history.value; offset = 0; void fastRefresh(); return refresh({ force: true }); });
   add(journalHeading, add(el('div'), el('h2', '', '판단 기록 · 피드백'), el('p', 'muted', '모의 발행과 보류 판단이 적절했는지 남겨주세요. 의견은 서버에 저장됩니다.')), history);
   const decisions = el('div', 'paper-trial-decisions'); decisions.id = 'paper-trial-decisions';
   const empty = el('div', 'empty-state', '모의 운영을 시작하면 수집된 후보의 판단이 여기에 쌓입니다.'); empty.id = 'paper-trial-empty';
@@ -188,7 +190,78 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   nextButton.addEventListener('click', () => { if (nextButton.disabled) return; offset += 50; return refresh({ force: true }); });
   add(paging, previousButton, pageCount, nextButton);
   add(journal, journalHeading, empty, decisions, paging);
-  add(root, heading, status, controlPanel, stats, laneStats, selectionPanel, diagnostics, journal);
+  const rapidPanel=el('section','panel paper-trial-rapid');rapidPanel.id='paper-trial-rapid';
+  const rapidStatus=el('p','muted');rapidStatus.id='paper-rapid-status';rapidStatus.setAttribute('role','status');
+  const rapidCards=el('div','paper-trial-decisions');rapidCards.id='paper-rapid-cards';
+  add(rapidPanel,el('h2','','즉시 모의 발행안'),el('p','muted','수신한 원문과 이미지에서 이름을 먼저 뽑습니다. 목표는 수신 후 2초이며, 실제 토큰 발행이나 매수는 하지 않습니다.'),rapidStatus,rapidCards);
+  add(root, heading, rapidPanel, status, controlPanel, stats, laneStats, selectionPanel, diagnostics, journal);
+
+  function rapidImage(item) {
+    if(!item?.image)return null;
+    const expected=`/api/paper-trial/rapid/${item.id}/image`,info=item.image;
+    if(!/^[0-9a-f-]{36}$/i.test(item.id??'')||info.previewUrl!==expected||!/^[a-f0-9]{64}$/.test(info.sha256??'')||
+      !['image/png','image/jpeg','image/webp'].includes(info.contentType))return {error:'원본 이미지 주소를 확인할 수 없습니다.'};
+    const key=`${item.id}:${info.sha256}`;
+    if(rapidArtwork.has(key))return rapidArtwork.get(key);
+    const entry={key,pending:true,url:null,error:''},mine=rapidEpoch;rapidArtwork.set(key,entry);
+    Promise.resolve().then(()=>api(expected,{responseType:'blob'})).then(blob=>{
+      if(mine!==rapidEpoch||rapidArtwork.get(key)!==entry)return;
+      if(!blob||blob.type!==info.contentType||blob.size>2*1024*1024)throw new Error('원본 이미지 형식을 확인할 수 없습니다.');
+      entry.url=objectUrls.createObjectURL(blob);entry.pending=false;entry.error='';drawRapid(true);
+    }).catch(failure=>{
+      if(mine!==rapidEpoch||rapidArtwork.get(key)!==entry)return;
+      entry.pending=false;entry.error=failure.message||'원본 이미지를 불러오지 못했습니다.';drawRapid(true);
+    });
+    return entry;
+  }
+  function clearRapid() {
+    rapidEpoch++;rapidAbort?.abort();rapidAbort=null;rapidRequest=null;rapidSnapshot=null;rapidError='';rapidRenderSignature='';
+    for(const entry of rapidArtwork.values())if(entry.url)objectUrls.revokeObjectURL(entry.url);
+    rapidArtwork.clear();rapidCards.replaceChildren();
+  }
+  function drawRapid(force=false) {
+    const items=list(rapidSnapshot?.items).slice(0,30),waiting=items.some(item=>!['ready','failed','insufficient_evidence','needs_visual'].includes(item.status));
+    const signature=JSON.stringify([rapidSnapshot,rapidError,waiting?Math.floor(Date.now()/1000):0]);
+    if(!force&&signature===rapidRenderSignature)return;rapidRenderSignature=signature;
+    rapidStatus.textContent=rapidError?`${rapidError}${items.length?' · 마지막 발행안을 표시합니다.':''}`:items.length?`최근 발행안 ${items.length}건 · 원문 이미지를 우선 표시합니다.`:'새 원문 수신을 기다리고 있습니다.';
+    const retained=new Set(items.filter(item=>item.image).map(item=>`${item.id}:${item.image.sha256}`));
+    for(const [key,entry]of rapidArtwork)if(!retained.has(key)){if(entry.url)objectUrls.revokeObjectURL(entry.url);rapidArtwork.delete(key);}
+    rapidCards.replaceChildren();
+    for(const item of items) {
+      const proposal=item.result?.proposal,card=el('article','panel paper-trial-decision');card.id=`paper-rapid-${item.id}`;
+      add(card,el('h3','',proposal?`${proposal.name} · $${proposal.symbol}`:'이름 확인 중'),proposal?.description?el('p','',proposal.description):null);
+      const labels={queued:'원문 이미지 확인 대기',running:'원문 이미지 읽는 중',extracting:'원문 이미지 읽는 중',processing:'원문 이미지 읽는 중',ready:'즉시 모의 발행안 준비',needs_visual:'이미지의 핵심 문구 확인 필요',insufficient_evidence:'이름을 정할 원문 근거 부족',failed:'원문 확인 재시도 필요'};
+      const ms=number(item.receiptToReadyMs),received=Date.parse(item.receivedAt??''),elapsed=Number.isFinite(received)?Math.max(0,Date.now()-received):null;
+      add(card,el('p','muted',`${labels[item.status]||'원문 확인 중'}${ms!==null?` · 수신 후 ${Math.round(ms).toLocaleString('ko-KR')}ms${ms>2000?' · 2초 목표 초과':''}`:waiting&&elapsed!==null?` · 수신 후 ${(elapsed/1000).toFixed(1)}초${elapsed>2000?' · 2초 목표 초과':''}`:''}`));
+      const visualCoverage=item.result?.imageCoverage;
+      if(number(visualCoverage?.attached)!==null&&number(visualCoverage?.inspected)!==null&&visualCoverage.inspected>=0&&visualCoverage.inspected<visualCoverage.attached)
+        add(card,el('p','muted',`첨부 이미지 ${visualCoverage.attached}개 중 ${visualCoverage.inspected}개 확인`));
+      if(item.postTrial)add(card,el('p','muted','관찰 종료 후 재검증 · 당시 2초 처리 성과에 포함하지 않습니다.'));
+      const original=rapidImage(item);
+      if(original){
+        const img=el('img','paper-trial-preparation-image');img.width=320;img.loading='lazy';img.decoding='async';img.alt=proposal?`${proposal.name} 원문 이미지`:'발행안 근거 원문 이미지';img.hidden=!original.url;if(original.url)img.src=original.url;
+        img.addEventListener('error',()=>{if(original.url){objectUrls.revokeObjectURL(original.url);original.url=null;original.error='원본 이미지를 표시하지 못했습니다.';drawRapid(true);}});
+        add(card,img,el('p','muted',original.error||original.pending?'원본 이미지'+(original.error?` · ${original.error}`:' 불러오는 중'):'원문 이미지'));
+        if(original.error&&original.key){const retry=button('원본 이미지 다시 불러오기',`paper-rapid-image-retry-${item.id}`);retry.addEventListener('click',()=>{rapidArtwork.delete(original.key);drawRapid(true);});card.append(retry);}
+      } else if(list(item.result?.reasonCodes).includes('OCR_REQUIRED'))add(card,el('p','muted','원문 이미지를 확보한 뒤 표시합니다.'));
+      if(item.error)add(card,el('p','muted',String(item.error)));
+      if(item.retryAt)add(card,el('p','muted',`다음 재시도 ${date(item.retryAt)}`));
+      const actor=item.source?.repost?.actor?.handle||item.source?.repost?.actor,author=item.source?.author;
+      add(card,el('p','muted',[author?`원작성자 ${author}`:'',typeof actor==='string'?`재게시 ${actor}`:''].filter(Boolean).join(' · ')));
+      try{const url=new URL(item.source?.url);if(url.protocol==='https:'&&!url.username&&!url.password){const anchor=el('a','','원문 보기 ↗');anchor.href=url.href;anchor.target='_blank';anchor.rel='noopener noreferrer';card.append(anchor);}}catch{}
+      rapidCards.append(card);
+    }
+  }
+  function fastRefresh({sessionId=selectedSession||''}={}) {
+    if(sessionId!==rapidSession){clearRapid();rapidSession=sessionId;}
+    if(rapidRequest)return rapidRequest;
+    const mine=rapidEpoch,controller=new AbortController();rapidAbort=controller;
+    const request=Promise.resolve().then(()=>api(`/api/paper-trial/rapid${sessionId?`?sessionId=${encodeURIComponent(sessionId)}`:''}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])})).then(next=>{
+      if(mine!==rapidEpoch)return;rapidSnapshot=next;rapidError='';drawRapid();
+    }).catch(failure=>{if(mine!==rapidEpoch)return;rapidError=failure.message||'즉시 발행안을 불러오지 못했습니다.';drawRapid();})
+      .finally(()=>{if(mine===rapidEpoch&&rapidRequest===request){rapidRequest=null;rapidAbort=null;}});
+    rapidRequest=request;return request;
+  }
 
   function decisionRow(item) {
     const article = el('article', 'panel paper-trial-decision'); article.setAttribute('aria-label', '후보 판단과 피드백');
@@ -274,7 +347,7 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       const image=preparationImage(preparation);
       preview.hidden=!image?.url;preview.alt=`${token.name||'모의 토큰'} 이미지`;
       if(image?.url)preview.src=image.url;else preview.removeAttribute?.('src');
-      imageStatus.textContent=image?.error|| (image?.pending?'모의 이미지 불러오는 중…':'');imageStatus.hidden=!imageStatus.textContent;
+      imageStatus.textContent=image?.error|| (image?.pending?'모의 이미지 불러오는 중…':preparation?.image?.kind==='source_capture'?'원문 이미지':'');imageStatus.hidden=!imageStatus.textContent;
       imageRetry.hidden=!image?.error||!image.key;
       rationale.textContent = list(item.reasons).length ? list(item.reasons).map(reasonText).join(' · ') : issued ? '선별 조건 통과 · 실제 발행은 하지 않았습니다.' : '보류 이유 미기록';
       if (logicalLane === 'core_author' && issued) rationale.textContent = '설정한 계정의 원문을 확인해 모의 발행 의사를 기록했습니다.';
@@ -459,11 +532,13 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     finally { if (mine === resetEpoch) { exporting = false; draw(); } }
   }
   function reset() {
+    clearRapid();rapidSession='';drawRapid();
     epoch++; resetEpoch++; snapshot = null; loading = false; pending = false; exporting = false; error = ''; selectedSession = ''; renderedSession = null; offset = 0;
     configDirty = false; configSession = null; selectionSession = null; startHotAuto.checked = true;
     for(const entry of artwork.values())if(entry.url)objectUrls.revokeObjectURL(entry.url);artwork.clear();
     rows.clear(); selectionRows.clear(); drafts.clear(); decisions.replaceChildren(); selectionDecisions.replaceChildren(); draw();
   }
   draw();
-  return { render: refresh, refresh, reset };
+  drawRapid();
+  return { render: refresh, refresh, fastRefresh, reset };
 }

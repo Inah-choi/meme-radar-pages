@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=4dc4a850ed69c3b865e5';
-import {createBangerRadar} from './banger-radar.mjs?v=4dc4a850ed69c3b865e5';
-import {createMyTokens} from './my-tokens.mjs?v=4dc4a850ed69c3b865e5';
-import {createOriginBuy} from './origin-buy.mjs?v=4dc4a850ed69c3b865e5';
-import {createPaperTrial} from './paper-trial.mjs?v=4dc4a850ed69c3b865e5';
-import {API_ORIGIN} from './deployment-config.mjs?v=4dc4a850ed69c3b865e5';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=4dc4a850ed69c3b865e5';
+import {createRadarReview} from './radar-review.mjs?v=d810b46a3726b20d84c4';
+import {createBangerRadar} from './banger-radar.mjs?v=d810b46a3726b20d84c4';
+import {createMyTokens} from './my-tokens.mjs?v=d810b46a3726b20d84c4';
+import {createOriginBuy} from './origin-buy.mjs?v=d810b46a3726b20d84c4';
+import {createPaperTrial} from './paper-trial.mjs?v=d810b46a3726b20d84c4';
+import {API_ORIGIN} from './deployment-config.mjs?v=d810b46a3726b20d84c4';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=d810b46a3726b20d84c4';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -599,7 +599,7 @@ async function api(path, options = {}) {
   const requestOrigin = state.apiOrigin, requestKey = state.key;
   const target = apiRequestUrl(path, requestOrigin || location.origin, location.origin);
   const headers = {
-    Accept: responseType === 'blob' ? 'image/png' : "application/json",
+    Accept: responseType === 'blob' ? 'image/png, image/jpeg, image/webp' : "application/json",
     ...(state.key ? { Authorization: `Bearer ${state.key}` } : {}),
     ...(options.body ? { "Content-Type": "application/json" } : {}),
     ...options.headers,
@@ -652,7 +652,7 @@ async function api(path, options = {}) {
     if(result.error?.details!==undefined)error.details=result.error.details;
     throw error;
   }
-  if(responseType === 'blob' && (result.type !== 'image/png' || result.size > 10 * 1024 * 1024))
+  if(responseType === 'blob' && (!['image/png','image/jpeg','image/webp'].includes(result.type) || result.size > 10 * 1024 * 1024))
     throw new Error('모의 이미지 형식을 확인할 수 없습니다.');
   return result;
 }
@@ -3740,7 +3740,7 @@ function navigate() {
   if (state.page === "bangers" && state.key) bangerRadar.render();
   if (state.page === "my-tokens" && state.key) void myTokens.render();
   if (state.page === "origin-buy" && state.key) void originBuy.render();
-  if (state.page === "paper-trial" && state.key) void paperTrial.render();
+  if (state.page === "paper-trial" && state.key) { void paperTrial.fastRefresh(); void paperTrial.render(); }
   if (state.key) refresh({ silent: true });
 }
 function updateApiConnectionLinks(input = state.apiOrigin) {
@@ -3911,6 +3911,10 @@ document.addEventListener("visibilitychange", () => {
 window.setInterval(() => {
   if (!document.hidden && state.key) refresh({ silent: true });
 }, 8000);
+// This small feed never rebuilds the full journal or starts dashboard refreshes.
+window.setInterval(() => {
+  if (!document.hidden && state.key && state.page === 'paper-trial') void paperTrial.fastRefresh();
+}, 350);
 if (state.key) {
   $("#login-screen").hidden = true;
   $("#workspace").hidden = false;
