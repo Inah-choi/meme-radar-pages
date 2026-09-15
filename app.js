@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=379f72ae71f95e32df06';
-import {createBangerRadar} from './banger-radar.mjs?v=379f72ae71f95e32df06';
-import {createMyTokens} from './my-tokens.mjs?v=379f72ae71f95e32df06';
-import {createOriginBuy} from './origin-buy.mjs?v=379f72ae71f95e32df06';
-import {createPaperTrial} from './paper-trial.mjs?v=379f72ae71f95e32df06';
-import {API_ORIGIN} from './deployment-config.mjs?v=379f72ae71f95e32df06';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=379f72ae71f95e32df06';
+import {createRadarReview} from './radar-review.mjs?v=75e0c71e93281d3af525';
+import {createBangerRadar} from './banger-radar.mjs?v=75e0c71e93281d3af525';
+import {createMyTokens} from './my-tokens.mjs?v=75e0c71e93281d3af525';
+import {createOriginBuy} from './origin-buy.mjs?v=75e0c71e93281d3af525';
+import {createPaperTrial} from './paper-trial.mjs?v=75e0c71e93281d3af525';
+import {API_ORIGIN} from './deployment-config.mjs?v=75e0c71e93281d3af525';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=75e0c71e93281d3af525';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -1167,8 +1167,9 @@ function renderLiveReadiness() {
   button.disabled = !state.key || state.liveReadinessLoading;
   button.textContent = state.liveReadinessLoading ? '점검 중…' : '실전 점검 갱신';
   const ready = !state.liveReadinessLoading && result?.status === 'ready' && result.readyForLive === true && result.checks.length > 0 && result.checks.every(check => check.status === 'pass');
+  const liveConfigured = settings.mode === 'AUTO' && settings.hotEnabled === true && settings.rawDryRun === false && settings.effectiveDryRun === false && settings.liveLocked === false;
   summary.textContent = state.liveReadinessError || (!result ? '실전 준비 미검증 · 점검 결과를 불러오세요.'
-    : `${result.status === 'blocked' ? '실전 점검: 미해결 항목 있음' : ready ? '실전 준비 점검 통과' : '실전 점검: 미검증 항목 있음'} · 점검 ${date(result.checkedAt)}`);
+    : `${liveConfigured ? '실발행 설정 켜짐 · ' : ''}${result.status === 'blocked' ? '실전 점검: 미해결 항목 있음' : ready ? '실전 준비 점검 통과' : '실전 점검: 미검증 항목 있음'} · 점검 ${date(result.checkedAt)}`);
   summary.className = `lane-readiness${ready && !state.liveReadinessError ? '' : ' warning'}`;
   const settingsNode = $('#hot-live-settings');
   settingsNode.textContent = result ? `실제 설정 · 핫레인 후보 처리 ${liveSettingLabel(settings.hotEnabled)} · 플래시 발행 ${liveSettingLabel(settings.flashEnabled)} · 핫레인→플래시 자동 연결 ${liveSettingLabel(settings.autoHot)} · 선택 경로 ${settings.route === 'flash' ? '플래시' : settings.route === 'direct' ? '직접 발행' : '미확인'}\n${display(settings.mode, '모드 미확인')} · 모의 실행 차단 ${liveSettingLabel(settings.effectiveDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)} · ${display(settings.network, '네트워크 미확인')}` : '현재 회차의 모의 설정과 실제 자동 발행 설정을 따로 확인합니다.';
