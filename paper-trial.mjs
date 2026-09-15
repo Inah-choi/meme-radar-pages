@@ -117,7 +117,10 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
   const applyConfigButton = button('모의 설정 적용', 'paper-trial-config-apply', 'button small subtle');
   applyConfigButton.addEventListener('click', configure);
   add(configControls, hotAutoLabel, coreAutoLabel, applyConfigButton);
-  add(simulationPanel, simulationStatus, coreStatus, configControls, el('p', 'muted', '모의 판단에만 적용합니다. 실제 자동 발행 설정과 가스비 차단은 유지됩니다. 변경 전 기록도 그대로 보관합니다.'));
+  const liveReadinessLink = el('a', '', '실제 자동 발행 준비 점검 보기 ↗'); liveReadinessLink.href = '#hot-lane';
+  add(simulationPanel, el('h3', '', '현재 회차의 모의 설정'), simulationStatus, coreStatus, configControls,
+    el('p', 'muted', '모의 판단에만 적용합니다. 실제 자동 발행 설정과 가스비 차단은 유지됩니다. 변경 전 기록도 그대로 보관합니다.'),
+    add(el('p', 'muted'), liveReadinessLink));
   const safety = el('p', 'paper-trial-safety'); safety.id = 'paper-trial-safety';
   const clock = el('p', 'paper-trial-clock'); clock.id = 'paper-trial-clock';
   const progress = el('progress', 'paper-trial-progress'); progress.max = 100; progress.value = 0; progress.setAttribute('aria-label', '모의 운영 관찰 시간');
@@ -231,8 +234,10 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
       const proposal=item.result?.proposal,card=el('article','panel paper-trial-decision');card.id=`paper-rapid-${item.id}`;
       add(card,el('h3','',proposal?`${proposal.name} · $${proposal.symbol}`:'이름 확인 중'),proposal?.description?el('p','',proposal.description):null);
       const labels={queued:'원문 이미지 확인 대기',running:'원문 이미지 읽는 중',extracting:'원문 이미지 읽는 중',processing:'원문 이미지 읽는 중',ready:'즉시 모의 발행안 준비',needs_visual:'이미지의 핵심 문구 확인 필요',insufficient_evidence:'이름을 정할 원문 근거 부족',failed:'원문 확인 재시도 필요'};
-      const ms=number(item.receiptToReadyMs),received=Date.parse(item.receivedAt??''),elapsed=Number.isFinite(received)?Math.max(0,Date.now()-received):null;
-      add(card,el('p','muted',`${labels[item.status]||'원문 확인 중'}${ms!==null?` · 수신 후 ${Math.round(ms).toLocaleString('ko-KR')}ms${ms>2000?' · 2초 목표 초과':''}`:waiting&&elapsed!==null?` · 수신 후 ${(elapsed/1000).toFixed(1)}초${elapsed>2000?' · 2초 목표 초과':''}`:''}`));
+      const imageUnverified=list(item.result?.reasonCodes).includes('SOURCE_IMAGE_UNVERIFIED');
+      const label=item.status==='needs_visual'&&imageUnverified?'원문 이미지 유무 확인 필요':labels[item.status]||'원문 확인 중';
+      const ms=number(item.receiptToReadyMs),textMs=number(item.receiptToTextReadyMs),received=Date.parse(item.receivedAt??''),elapsed=Number.isFinite(received)?Math.max(0,Date.now()-received):null;
+      add(card,el('p','muted',`${label}${ms!==null?` · 수신 후 ${Math.round(ms).toLocaleString('ko-KR')}ms${ms>2000?' · 2초 목표 초과':''}`:textMs!==null?` · 이름 초안 ${Math.round(textMs).toLocaleString('ko-KR')}ms · 이미지 준비 시간 제외`:waiting&&elapsed!==null?` · 수신 후 ${(elapsed/1000).toFixed(1)}초${elapsed>2000?' · 2초 목표 초과':''}`:''}`));
       const visualCoverage=item.result?.imageCoverage;
       if(number(visualCoverage?.attached)!==null&&number(visualCoverage?.inspected)!==null&&visualCoverage.inspected>=0&&visualCoverage.inspected<visualCoverage.attached)
         add(card,el('p','muted',`첨부 이미지 ${visualCoverage.attached}개 중 ${visualCoverage.inspected}개 확인`));
@@ -442,7 +447,9 @@ export function createPaperTrial({ api, document = globalThis.document, toast = 
     if (hotCoverage) coverage.textContent += ` · 이번 핫 신호 검토 ${count(hotCoverage.evaluatedThisTick)} / ${count(hotCoverage.poolSize)}개${hotCoverage.rotating ? ' · 순환 검토 중' : ''}${hotCoverage.poolTruncated ? ' · 조회 범위 제한 있음' : ''}`;
     const measured = snapshot?.operations, latency = measured?.receiptToDecision;
     operations.hidden = !measured;
-    operations.textContent = measured ? `유명인 원문 수신→기록 p95 ${number(latency?.p95Ms) === null ? '측정 전' : `${(latency.p95Ms / 1000).toFixed(2)}초`} / 목표 2초 · ${count(latency?.samples)}건${latency?.evaluation === 'insufficient_samples' ? ' · 표본 수집 중' : latency?.evaluation === 'over_target' ? ' · 지연 확인 필요' : ''} · 제작 연결 누락 ${count(measured.missingPreparationCount)}건 · 중복 발행 ${count(measured.duplicateIssuanceCount)}건 · 제작 대기·진행 ${count(measured.unfinishedJobs)}건` : '';
+    const enoughSamples = number(latency?.samples) !== null && latency.samples >= 20;
+    const measuredP95 = number(latency?.p95Ms) === null ? '측정 전' : `${(latency.p95Ms / 1000).toFixed(2)}초`;
+    operations.textContent = measured ? `유명인 원문 수신→기록 p95 ${!enoughSamples ? `미검증 · 실제 표본 ${count(latency?.samples)}/20건 · 참고 p95 ${measuredP95}` : `${measuredP95} · 실제 표본 ${count(latency.samples)}건${number(latency?.p95Ms) === null ? ' · 미검증' : latency.p95Ms > 2000 ? ' · 지연 확인 필요' : ' · 목표 이내'}`} / 목표 2초 · 게시→수신 지연은 별도이며 이 수치에 포함하지 않습니다. · 제작 연결 누락 ${count(measured.missingPreparationCount)}건 · 중복 발행 ${count(measured.duplicateIssuanceCount)}건 · 제작 대기·진행 ${count(measured.unfinishedJobs)}건` : '';
     limitations.replaceChildren(...list(report?.limitations).map(value => el('li', '', value)));
     downloadButton.disabled = !session || exporting;
     downloadButton.textContent = exporting ? '전체 판단 기록을 모으는 중…' : '전체 검토 보고서 저장 ↓';
