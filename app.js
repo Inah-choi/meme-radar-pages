@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=37151f6d4c326911e22f';
-import {createBangerRadar} from './banger-radar.mjs?v=37151f6d4c326911e22f';
-import {createMyTokens} from './my-tokens.mjs?v=37151f6d4c326911e22f';
-import {createOriginBuy} from './origin-buy.mjs?v=37151f6d4c326911e22f';
-import {createPaperTrial} from './paper-trial.mjs?v=37151f6d4c326911e22f';
-import {API_ORIGIN} from './deployment-config.mjs?v=37151f6d4c326911e22f';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=37151f6d4c326911e22f';
+import {createRadarReview} from './radar-review.mjs?v=bdeb572b47ffdc94ab36';
+import {createBangerRadar} from './banger-radar.mjs?v=bdeb572b47ffdc94ab36';
+import {createMyTokens} from './my-tokens.mjs?v=bdeb572b47ffdc94ab36';
+import {createOriginBuy} from './origin-buy.mjs?v=bdeb572b47ffdc94ab36';
+import {createPaperTrial} from './paper-trial.mjs?v=bdeb572b47ffdc94ab36';
+import {API_ORIGIN} from './deployment-config.mjs?v=bdeb572b47ffdc94ab36';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=bdeb572b47ffdc94ab36';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -960,6 +960,7 @@ function hotLaneEditorial(quality) {
     scores.append(append(node('div'), node('span', 'muted', label), node('strong', '', known ? `${value}/5` : '미확인')));
   }
   section.append(scores);
+  if (quality.attention?.sourceAdmission?.mode === 'source_first') section.append(node('p', 'muted', '빠른 원문 검토 · 각 항목 3점 이상 · 이름·티커·설명을 함께 준비합니다.'));
   if (list(review.risks).length) { const risks = node('ul', 'hot-editorial-risks'); for (const risk of list(review.risks).slice(0, 4)) risks.append(node('li', '', String(risk).slice(0, 400))); section.append(risks); }
   section.append(node('p', 'muted', `AI 편집 점수이며 예상 거래량이 아닙니다.${review.reviewedAt ? ` 검토 ${date(review.reviewedAt)}` : ''}${review.expiresAt ? ` · 재검토 기준 ${date(review.expiresAt)}` : ''}`));
   return section;
@@ -1429,7 +1430,7 @@ function renderHotLane() {
   if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
-  if (lane.screening) parts.push(`${lane.screening.running ? 'AI 소재 검토 중' : 'AI 소재 검토'} · 최근 1시간 ${display(lane.screening.usedThisHour, '미확인')}${lane.screening.maxPerHour===null?'':`/${display(lane.screening.maxPerHour, '미확인')}`}건`);
+  if (lane.screening) parts.push(`${lane.screening.running ? 'AI 소재 검토 중' : 'AI 소재 검토'}${lane.screening.metadataInReview ? ' · 검토·작명 한 번에' : ''} · 최근 1시간 ${display(lane.screening.usedThisHour, '미확인')}${lane.screening.maxPerHour===null?'':`/${display(lane.screening.maxPerHour, '미확인')}`}건`);
   $('#hot-lane-summary').textContent = parts.join(' · ');
   const readiness = $('#hot-lane-readiness'), policy = state.overview?.policy || {};
   const blockers = [];
