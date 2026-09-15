@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=75e0c71e93281d3af525';
-import {createBangerRadar} from './banger-radar.mjs?v=75e0c71e93281d3af525';
-import {createMyTokens} from './my-tokens.mjs?v=75e0c71e93281d3af525';
-import {createOriginBuy} from './origin-buy.mjs?v=75e0c71e93281d3af525';
-import {createPaperTrial} from './paper-trial.mjs?v=75e0c71e93281d3af525';
-import {API_ORIGIN} from './deployment-config.mjs?v=75e0c71e93281d3af525';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=75e0c71e93281d3af525';
+import {createRadarReview} from './radar-review.mjs?v=bbf23fa95895885ee538';
+import {createBangerRadar} from './banger-radar.mjs?v=bbf23fa95895885ee538';
+import {createMyTokens} from './my-tokens.mjs?v=bbf23fa95895885ee538';
+import {createOriginBuy} from './origin-buy.mjs?v=bbf23fa95895885ee538';
+import {createPaperTrial} from './paper-trial.mjs?v=bbf23fa95895885ee538';
+import {API_ORIGIN} from './deployment-config.mjs?v=bbf23fa95895885ee538';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=bbf23fa95895885ee538';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -1232,6 +1232,7 @@ async function fetchHotLivePlan() {
   }
 }
 function hotLiveAmountLabel(key, value) {
+  if (value === null && ['maxDailyLaunches','maxPerHour','maxPerDay'].includes(key)) return '제한 없음';
   if (value === null || value === undefined) return '미확인';
   if (['maxPerLaunchWei','maxDailyCostWei'].includes(key)) return /^\d+$/.test(String(value)) ? `${exactEth(value)} ETH (${value} wei)` : '미확인';
   if (['devBuyWei','hotDevBuyWei','maxDevBuyWei'].includes(key)) return String(value) === '0' ? '없음 (0)' : `${value} 페어 자산 원시 단위`;
@@ -1253,10 +1254,12 @@ function hotLiveSelectedCosts(plan) {
     return values.map(value => BigInt(value)).reduce((a,b) => a < b ? a : b).toString();
   };
   const routed = plan.route === 'flash';
-  const hour = minimum([hot.maxPerHour,...(routed ? [flash.maxPerHour] : [])]);
-  const day = minimum([global.maxDailyLaunches,hot.maxPerDay,...(routed ? [flash.maxPerDay] : [])]);
+  const countLimit = values => values.every(value => value === null) ? '제한 없음'
+    : `최대 ${minimum(values.filter(value => value !== null)) ?? '미확인'}건`;
+  const hour = countLimit([hot.maxPerHour,...(routed ? [flash.maxPerHour] : [])]);
+  const day = countLimit([global.maxDailyLaunches,hot.maxPerDay,...(routed ? [flash.maxPerDay] : [])]);
   const cap = minimum([global.maxPerLaunchWei,hot.maxPerLaunchWei,...(routed ? [flash.maxPerLaunchWei] : [])]);
-  return `선택한 ${routed ? '플래시' : '직접 발행'} 경로 · 시간당 최대 ${hour ?? '미확인'}건 · 하루 최대 ${day ?? '미확인'}건\n발행 1건 비용 상한 ${hotLiveAmountLabel('maxPerLaunchWei',cap)} · 개발자 매수 ${hotLiveAmountLabel('devBuyWei',routed ? flash.hotDevBuyWei : hot.devBuyWei)}`;
+  return `선택한 ${routed ? '플래시' : '직접 발행'} 경로 · 시간당 ${hour} · 하루 ${day}\n발행 1건 비용 상한 ${hotLiveAmountLabel('maxPerLaunchWei',cap)} · 개발자 매수 ${hotLiveAmountLabel('devBuyWei',routed ? flash.hotDevBuyWei : hot.devBuyWei)}`;
 }
 function renderHotLiveSetup() {
   const plan = hotLivePlanCurrent(), staged = state.livePlanStaged, busy = state.livePlanLoading || Boolean(state.livePlanAction);
@@ -1419,7 +1422,9 @@ function renderHotLane() {
   status.textContent = paused ? '일시 중지' : lane.enabled ? '활성' : '비활성';
   status.className = `pill${paused ? ' warning' : lane.enabled ? ' success' : ''}`;
   const hour = lane.caps?.hour || {}, day = lane.caps?.day || {};
-  const parts = [`${display(lane.mode, 'PAPER')} 모드`, `시간당 ${display(hour.used, 0)} / ${display(hour.max, 0)}건`, `오늘 ${display(day.used, 0)} / ${display(day.max, 0)}건`];
+  const parts = [`${display(lane.mode, 'PAPER')} 모드`,
+    hour.max === null ? `시간당 ${display(hour.used, 0)}건 (제한 없음)` : `시간당 ${display(hour.used, 0)} / ${display(hour.max, 0)}건`,
+    day.max === null ? `오늘 ${display(day.used, 0)}건 (제한 없음)` : `오늘 ${display(day.used, 0)} / ${display(day.max, 0)}건`];
   if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
@@ -1791,7 +1796,7 @@ function renderStats() {
     statCard(
       "진행 중인 발행",
       active.toLocaleString("ko-KR"),
-      `${p.mode || "PAPER"} 모드 · 오늘 ${b.count ?? 0} / ${p.maxDailyLaunches ?? 0}건`,
+      `${p.mode || "PAPER"} 모드 · 오늘 ${b.count ?? 0}${p.maxDailyLaunches === null ? '건 · 개수 제한 없음' : ` / ${p.maxDailyLaunches ?? 0}건`}`,
       { unit: "건", icon: "◷" },
     ),
     statCard(
@@ -2864,8 +2869,8 @@ function renderLaunches() {
     ),
     statCard(
       "오늘 발행 수",
-      `${b.count ?? 0} / ${p.maxDailyLaunches ?? 0}`,
-      `예산 집계일 ${b.date || todayLocal()}`,
+      p.maxDailyLaunches === null ? `${b.count ?? 0}` : `${b.count ?? 0} / ${p.maxDailyLaunches ?? 0}`,
+      `예산 집계일 ${b.date || todayLocal()}${p.maxDailyLaunches === null ? ' · 발행 개수 제한 없음' : ''}`,
       { unit: "건" },
     ),
   );
@@ -3081,7 +3086,7 @@ async function savePolicy(event) {
       "minLaunchIntervalSeconds",
       "maxConsecutiveErrors",
     ])
-      payload[key] = Number(values.get(key));
+      payload[key] = key === 'maxDailyLaunches' && String(values.get(key) ?? '').trim() === '' ? null : Number(values.get(key));
     try {
       const policy = await api("/api/policies", {
         method: "PATCH",
