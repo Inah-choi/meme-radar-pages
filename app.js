@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=bdeb572b47ffdc94ab36';
-import {createBangerRadar} from './banger-radar.mjs?v=bdeb572b47ffdc94ab36';
-import {createMyTokens} from './my-tokens.mjs?v=bdeb572b47ffdc94ab36';
-import {createOriginBuy} from './origin-buy.mjs?v=bdeb572b47ffdc94ab36';
-import {createPaperTrial} from './paper-trial.mjs?v=bdeb572b47ffdc94ab36';
-import {API_ORIGIN} from './deployment-config.mjs?v=bdeb572b47ffdc94ab36';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=bdeb572b47ffdc94ab36';
+import {createRadarReview} from './radar-review.mjs?v=72357af73c2689b52420';
+import {createBangerRadar} from './banger-radar.mjs?v=72357af73c2689b52420';
+import {createMyTokens} from './my-tokens.mjs?v=72357af73c2689b52420';
+import {createOriginBuy} from './origin-buy.mjs?v=72357af73c2689b52420';
+import {createPaperTrial} from './paper-trial.mjs?v=72357af73c2689b52420';
+import {API_ORIGIN} from './deployment-config.mjs?v=72357af73c2689b52420';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=72357af73c2689b52420';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -1552,7 +1552,7 @@ function flashLaunchReady(lane, operator, paused) {
 function flashReasonText(code) {
   const availability = { FLASH_NOT_WARM: '발행 연결을 준비하지 못했습니다. 잠시 뒤 다시 미리보기 하세요.', FLASH_LAUNCH_SERVICE_UNAVAILABLE: '서버의 발행 연결이 설정되지 않았습니다.', FLASH_LANE_DISABLED: '플래시 발행이 비활성 상태입니다.', FLASH_LANE_MODE_WATCH: '관찰 모드에서는 발행할 수 없습니다.', FLASH_LANE_EMERGENCY_STOP: '긴급 정지 중입니다.', FLASH_LANE_POLICY_PAUSED: '자동화가 일시 중지되어 있습니다.', FLASH_LANE_PAUSED: '플래시 발행이 일시 중지되어 있습니다.', FLASH_HOUR_CAP: '이번 시간의 발행 한도에 도달했습니다.', FLASH_DAY_CAP: '오늘의 발행 한도에 도달했습니다.', FLASH_KEY_COOLDOWN: '같은 소재를 최근 발행했습니다. 대기 시간이 지난 뒤 다시 시도하세요.', FLASH_DUPLICATE_LAUNCH: '이미 발행한 소재입니다.' };
   if (availability[code]) return availability[code];
-  return ({ FLASH_NO_KEY: '원문에서 이름을 만들 수 없습니다. 주제가 드러나는 문장이나 이름을 입력하세요.', FLASH_IMAGE_UNAVAILABLE: '이미지를 준비하지 못했습니다. 이미지 주소를 입력하거나 다시 미리보기 하세요.', FLASH_ARTWORK_UNAVAILABLE: '자동 이미지 준비에 실패했습니다. 다시 미리보기 하세요.', FLASH_NOT_FUNDED: '발행 지갑의 자금이 부족합니다.', FLASH_PREVIEW_EXPIRED: '미리보기 유효 시간이 지났습니다. 다시 준비하세요.', FLASH_PREVIEW_CHANGED: '입력 또는 발행 모드가 바뀌었습니다. 다시 미리보기 하세요.' })[code] || String(code);
+  return ({ FLASH_NO_KEY: '원문에서 이름을 만들 수 없습니다. 주제가 드러나는 문장이나 이름을 입력하세요.', FLASH_IMAGE_UNAVAILABLE: '이미지를 준비하지 못했습니다. 이미지 주소를 입력하거나 다시 미리보기 하세요.', FLASH_ARTWORK_UNAVAILABLE: '자동 이미지 준비에 실패했습니다. 다시 미리보기 하세요.', FLASH_IMAGE_HOST_UNSTABLE: '그림 주소가 임시 주소라 발행을 보류했습니다.', FLASH_IMAGE_PUBLISH_FAILED: '그림 업로드에 실패했습니다. 다시 준비해 주세요.', FLASH_IMAGE_TIMEOUT: '그림 연결 확인이 지연됐습니다. 다시 준비해 주세요.', FLASH_IMAGE_RESPONSE_INVALID: '그림 주소에서 정상 이미지를 받지 못했습니다.', FLASH_IMAGE_HASH_MISMATCH: '업로드한 그림이 원본과 달라 발행을 보류했습니다.', FLASH_NOT_FUNDED: '발행 지갑의 자금이 부족합니다.', FLASH_PREVIEW_EXPIRED: '미리보기 유효 시간이 지났습니다. 다시 준비하세요.', FLASH_PREVIEW_CHANGED: '입력 또는 발행 모드가 바뀌었습니다. 다시 미리보기 하세요.' })[code] || String(code);
 }
 function flashLaunchNote(lane, operator, paused) {
   if (!operator) return '운영자 권한이 필요합니다. 읽기 전용으로 표시합니다.';
