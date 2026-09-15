@@ -74,7 +74,7 @@ export function createOriginBuy({ api, document = globalThis.document, toast = (
     try { const parsed = new URL(url); if (parsed.protocol !== 'https:' || parsed.hostname !== allowedHost || parsed.username || parsed.password) return null; } catch { return null; }
     const node = el('a', 'text-link', label); node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer'; return node;
   };
-  const explorer = (label, kind, value) => link(label, `https://robinhoodchain.blockscout.com/${kind}/${value}`, 'robinhoodchain.blockscout.com');
+  const explorer = (label, kind, value) => link(label, `https://robin.etherscan.io/${kind}/${value}`, 'robin.etherscan.io');
   const xLink = (label, url) => link(label, url, 'x.com');
   let snapshot = null, error = '', loading = false, pendingKey = null, epoch = 0;
 

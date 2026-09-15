@@ -76,7 +76,7 @@ export function createMyTokens({api, document = globalThis.document, now = Date.
     catch { return null; }
     const node = el('a', 'text-link', label); node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer'; return node;
   };
-  const explorer = (label, kind, value) => link(label, `https://robinhoodchain.blockscout.com/${kind}/${value}`, 'robinhoodchain.blockscout.com');
+  const explorer = (label, kind, value) => link(label, `https://robin.etherscan.io/${kind}/${value}`, 'robin.etherscan.io');
   let snapshot = null, error = '', loading = false, lastFetched = null, pending = null, epoch = 0;
   const claimViews = new Map(), sellViews = new Map();
   const heading = el('div', 'page-heading');

@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=f7a7e14ae5175191eafd';
-import {createBangerRadar} from './banger-radar.mjs?v=f7a7e14ae5175191eafd';
-import {createMyTokens} from './my-tokens.mjs?v=f7a7e14ae5175191eafd';
-import {createOriginBuy} from './origin-buy.mjs?v=f7a7e14ae5175191eafd';
-import {createPaperTrial} from './paper-trial.mjs?v=f7a7e14ae5175191eafd';
-import {API_ORIGIN} from './deployment-config.mjs?v=f7a7e14ae5175191eafd';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=f7a7e14ae5175191eafd';
+import {createRadarReview} from './radar-review.mjs?v=379f72ae71f95e32df06';
+import {createBangerRadar} from './banger-radar.mjs?v=379f72ae71f95e32df06';
+import {createMyTokens} from './my-tokens.mjs?v=379f72ae71f95e32df06';
+import {createOriginBuy} from './origin-buy.mjs?v=379f72ae71f95e32df06';
+import {createPaperTrial} from './paper-trial.mjs?v=379f72ae71f95e32df06';
+import {API_ORIGIN} from './deployment-config.mjs?v=379f72ae71f95e32df06';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=379f72ae71f95e32df06';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -1265,7 +1265,8 @@ function renderHotLiveSetup() {
   $('#hot-live-plan-refresh').disabled = !state.key || busy;
   $('#hot-live-plan-refresh').textContent = state.livePlanLoading ? '계획 조회 중…' : '전환 계획 조회';
   $('#hot-live-plan-status').textContent = state.livePlanError || (state.livePlanAction ? '요청 결과를 확인하는 중…' : state.livePlanNotice || (!plan ? '전환 계획 미검증 · 서버에서 현재 조건을 확인하세요.'
-    : plan.activationBlocked ? '활성화 차단 중 · 아래 준비 단계를 완료한 뒤 계획을 다시 확인하세요.' : '전환 계획 확인 가능 · 저장한 계획에 대한 최종 확인이 필요합니다.'));
+    : liveOn ? `현재 자동 실발행 설정 켜짐${settings.paused || settings.emergencyStop ? ' · 일시정지 또는 긴급정지 중' : ' · 후보별 발행 조건 통과 시 전송됩니다.'} 전환 계획의 점검 결과와 실제 발행 건수는 별도입니다.`
+      : plan.activationBlocked ? '활성화 차단 중 · 아래 준비 단계를 완료한 뒤 계획을 다시 확인하세요.' : '전환 계획 확인 가능 · 저장한 계획에 대한 최종 확인이 필요합니다.'));
   $('#hot-live-plan-content').hidden = !plan;
   $('#hot-live-plan-environment').textContent = plan ? `핫레인 실제 자동 발행 설정: ${liveKnown ? liveOn ? '켜짐' : '꺼짐' : '미확인'}${settings.paused || settings.emergencyStop ? ' · 일시정지 또는 긴급정지 중' : ''}\n현재 ${display(settings.mode, '모드 미확인')} · ${display(settings.network, '네트워크 미확인')} · 서버 DRY_RUN ${liveSettingLabel(settings.rawDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)}${plan.trial ? `\n모의 회차 ${plan.trial.id} · ${({running:'진행 중',completed:'완료',stopped:'조기 중단',cancelled:'취소'})[plan.trial.status] || plan.trial.status} · 종료 ${date(plan.trial.endsAt)}` : ''}` : '모의 회차·실제 발행 잠금·서버 실행 설정을 확인합니다.';
   const performance = plan?.performance, samples = performance?.samples;
@@ -2605,7 +2606,7 @@ function originEnrichmentView(item) {
 // Historical transactions always use the network stored on their own launch record.
 const NETWORK_EXPLORERS = Object.freeze({
   testnet: "https://explorer.testnet.chain.robinhood.com",
-  mainnet: "https://robinhoodchain.blockscout.com",
+  mainnet: "https://robin.etherscan.io",
 });
 function explorerFor(network) {
   return Object.hasOwn(NETWORK_EXPLORERS, network)
