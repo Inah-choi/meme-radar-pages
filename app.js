@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=88ec38bd1491d05743b3';
-import {createBangerRadar} from './banger-radar.mjs?v=88ec38bd1491d05743b3';
-import {createMyTokens} from './my-tokens.mjs?v=88ec38bd1491d05743b3';
-import {createOriginBuy} from './origin-buy.mjs?v=88ec38bd1491d05743b3';
-import {createPaperTrial} from './paper-trial.mjs?v=88ec38bd1491d05743b3';
-import {API_ORIGIN} from './deployment-config.mjs?v=88ec38bd1491d05743b3';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=88ec38bd1491d05743b3';
+import {createRadarReview} from './radar-review.mjs?v=f7a7e14ae5175191eafd';
+import {createBangerRadar} from './banger-radar.mjs?v=f7a7e14ae5175191eafd';
+import {createMyTokens} from './my-tokens.mjs?v=f7a7e14ae5175191eafd';
+import {createOriginBuy} from './origin-buy.mjs?v=f7a7e14ae5175191eafd';
+import {createPaperTrial} from './paper-trial.mjs?v=f7a7e14ae5175191eafd';
+import {API_ORIGIN} from './deployment-config.mjs?v=f7a7e14ae5175191eafd';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=f7a7e14ae5175191eafd';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -110,7 +110,7 @@ const statusLabels = {
   confirmed: "발행 완료",
   deployed: "발행 완료",
   paper: "PAPER 기록",
-  paper_completed: "PAPER 기록",
+    paper_completed: "PAPER 기록",
   held: "보류",
   blocked_policy: "정책 보류",
   rejected: "정책 제외",
@@ -771,10 +771,11 @@ async function refresh({ silent = false } = {}) {
   if (state.page === "paper-trial") void paperTrial.refresh();
   if (state.refreshing) return;
   const paperPage = state.page === "paper-trial";
+  const statusPage = paperPage || state.page === "hot-lane";
   state.refreshing = true;
   try {
     const results = await Promise.allSettled([
-      api(paperPage ? "/api/workspace-status" : "/api/overview"),
+      api(statusPage ? "/api/workspace-status" : "/api/overview"),
       state.page === "launches" ? api("/api/launches") : Promise.resolve(null),
     ]);
     if (results[0].status === "rejected") throw results[0].reason;
@@ -783,13 +784,13 @@ async function refresh({ silent = false } = {}) {
       number(state.overview?.policy?.version) > number(incoming.policy?.version)
     )
       incoming.policy = state.overview.policy;
-    state.overview = paperPage ? { ...state.overview, ...incoming } : incoming;
-    if (!paperPage) state.launches = list(state.overview.launches);
+    state.overview = statusPage ? { ...state.overview, ...incoming } : incoming;
+    if (!statusPage) state.launches = list(state.overview.launches);
     if (results[1].status === "fulfilled" && results[1].value)
       state.launches = list(results[1].value.items);
     state.lastSync = new Date().toISOString();
     state.lastError = "";
-    if (paperPage) renderWorkspaceStatus();
+    if (statusPage) renderWorkspaceStatus();
     else renderOverview();
     await refreshDraftStatus();
     if (state.page === "radar") await fetchCandidates();
@@ -1266,7 +1267,7 @@ function renderHotLiveSetup() {
   $('#hot-live-plan-status').textContent = state.livePlanError || (state.livePlanAction ? '요청 결과를 확인하는 중…' : state.livePlanNotice || (!plan ? '전환 계획 미검증 · 서버에서 현재 조건을 확인하세요.'
     : plan.activationBlocked ? '활성화 차단 중 · 아래 준비 단계를 완료한 뒤 계획을 다시 확인하세요.' : '전환 계획 확인 가능 · 저장한 계획에 대한 최종 확인이 필요합니다.'));
   $('#hot-live-plan-content').hidden = !plan;
-  $('#hot-live-plan-environment').textContent = plan ? `핫레인 실제 자동 발행 설정: ${liveKnown ? liveOn ? '켜짐' : '꺼짐' : '미확인'}${settings.paused || settings.emergencyStop ? ' · 일시정지 또는 긴급정지 중' : ''}\n현재 ${display(settings.mode, '모드 미확인')} · ${display(settings.network, '네트워크 미확인')} · 서버 DRY_RUN ${liveSettingLabel(settings.rawDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)}${plan.trial ? `\n모의 회차 ${plan.trial.id} · ${({running:'진행 중',completed:'완료',cancelled:'취소'})[plan.trial.status] || plan.trial.status} · 종료 ${date(plan.trial.endsAt)}` : ''}` : '모의 회차·실제 발행 잠금·서버 실행 설정을 확인합니다.';
+  $('#hot-live-plan-environment').textContent = plan ? `핫레인 실제 자동 발행 설정: ${liveKnown ? liveOn ? '켜짐' : '꺼짐' : '미확인'}${settings.paused || settings.emergencyStop ? ' · 일시정지 또는 긴급정지 중' : ''}\n현재 ${display(settings.mode, '모드 미확인')} · ${display(settings.network, '네트워크 미확인')} · 서버 DRY_RUN ${liveSettingLabel(settings.rawDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)}${plan.trial ? `\n모의 회차 ${plan.trial.id} · ${({running:'진행 중',completed:'완료',stopped:'조기 중단',cancelled:'취소'})[plan.trial.status] || plan.trial.status} · 종료 ${date(plan.trial.endsAt)}` : ''}` : '모의 회차·실제 발행 잠금·서버 실행 설정을 확인합니다.';
   const performance = plan?.performance, samples = performance?.samples;
   $('#hot-live-plan-performance').textContent = plan ? `지난 모의 회차: 실제 표본 ${Number.isSafeInteger(samples) && samples >= 0 ? `${samples}건` : '미확인'} · 수신→기록 p95 ${!Number.isSafeInteger(samples) || samples < 20 ? '미검증(표본 20건 미만 또는 미확인)' : performance?.p95Ms != null ? `${performance.p95Ms} ms` : '미검증'}. 게시→수신 지연은 별도입니다. 과거 성능 기록은 현재 후보의 발행 허용 여부를 대신하지 않습니다.` : '';
   const patch = plan?.policyPatch || {};
@@ -4096,8 +4097,7 @@ $("#login-form").addEventListener("submit", async (event) => {
       state.apiOrigin = origin;
       state.key = key;
       updateApiConnectionLinks(origin);
-      const paperPage = location.hash === '#paper-trial';
-      const overview = await api(paperPage ? "/api/workspace-status" : "/api/overview");
+      const overview = await api("/api/workspace-status");
       saveApiSession(sessionStorage, {apiOrigin: origin, key}, location.origin, API_ORIGIN);
       state.overview = overview;
       state.lastSync = new Date().toISOString();
@@ -4105,8 +4105,7 @@ $("#login-form").addEventListener("submit", async (event) => {
       $("#workspace").hidden = false;
       $("#login-error").textContent = "";
       $("#api-key").value = "";
-      if (paperPage) renderWorkspaceStatus();
-      else renderOverview();
+      renderWorkspaceStatus();
       navigate();
     } catch (error) {
       state.key = "";
