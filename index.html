@@ -13,13 +13,13 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23c3f664'/%3E%3Cpath d='M9 28V12h4l7 10 7-10h4v16h-5v-8l-6 8-6-8v8z' fill='%23101820'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="./style.css?v=9ce9bfc0cb638282ffcc" />
-    <link rel="stylesheet" href="./banger-radar.css?v=9ce9bfc0cb638282ffcc" />
-    <link rel="stylesheet" href="./next-bangers.css?v=9ce9bfc0cb638282ffcc" />
-    <link rel="stylesheet" href="./my-tokens.css?v=9ce9bfc0cb638282ffcc" />
-    <link rel="stylesheet" href="./origin-buy.css?v=9ce9bfc0cb638282ffcc" />
-    <link rel="stylesheet" href="./paper-trial.css?v=9ce9bfc0cb638282ffcc" />
-    <script type="module" src="./app.js?v=9ce9bfc0cb638282ffcc"></script>
+    <link rel="stylesheet" href="./style.css?v=88ec38bd1491d05743b3" />
+    <link rel="stylesheet" href="./banger-radar.css?v=88ec38bd1491d05743b3" />
+    <link rel="stylesheet" href="./next-bangers.css?v=88ec38bd1491d05743b3" />
+    <link rel="stylesheet" href="./my-tokens.css?v=88ec38bd1491d05743b3" />
+    <link rel="stylesheet" href="./origin-buy.css?v=88ec38bd1491d05743b3" />
+    <link rel="stylesheet" href="./paper-trial.css?v=88ec38bd1491d05743b3" />
+    <script type="module" src="./app.js?v=88ec38bd1491d05743b3"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">본문 바로가기</a>
@@ -397,6 +397,64 @@
               <div><div class="eyebrow">EARLY IDEAS · SOURCE EVIDENCE</div><h1>핫 레인</h1><p class="muted">원문 근거가 있고, 같은 이름·티커가 덜 붐비는 소재부터 검토하세요.</p></div>
               <a class="button subtle" href="#policy">자동화 정책 ↗</a>
             </div>
+            <section id="hot-live-panel" class="panel live-readiness-panel" aria-labelledby="hot-live-title">
+              <div class="panel-heading">
+                <div><h2 id="hot-live-title">핫레인 실전 준비 점검</h2><p class="muted">현재 설정과 차단 사유를 확인한 뒤 아래에서 전환 계획을 검토하세요.</p></div>
+                <button id="hot-live-refresh" class="button small subtle" type="button">실전 점검 갱신</button>
+              </div>
+              <p id="hot-live-summary" class="lane-readiness warning" role="status">실전 준비 미검증 · 점검 결과를 불러오세요.</p>
+              <p id="hot-live-settings" class="muted live-readiness-settings">현재 회차의 모의 설정과 실제 자동 발행 설정을 따로 확인합니다.</p>
+              <ul id="hot-live-checks" class="live-readiness-checks"></ul>
+              <p class="muted live-readiness-note">과거 모의 성능과 현재 준비 상태를 함께 점검합니다. 미해결 항목이 전체 발행의 잠금 상태를 뜻하지는 않습니다. 현재 자동 발행 설정은 아래에서, 후보별 기술 조건은 개별 발행안 검사에서 확인하세요. <a href="#paper-trial">모의 운영 기록 보기 ↗</a></p>
+            </section>
+            <section id="hot-live-setup" class="panel live-readiness-panel hot-live-setup" aria-labelledby="hot-live-setup-title">
+              <div class="panel-heading">
+                <div><h2 id="hot-live-setup-title">핫레인 자동 실발행 설정</h2><p class="muted">전환 계획 확인 → 운영자 준비 → 계획 저장 → 최종 활성화</p></div>
+                <button id="hot-live-plan-refresh" class="button small subtle" type="button">전환 계획 조회</button>
+              </div>
+              <p id="hot-live-plan-status" class="lane-readiness warning" role="status">전환 계획 미검증 · 서버에서 현재 조건을 확인하세요.</p>
+              <div class="hot-live-plan-body">
+                <p id="hot-live-plan-environment" class="muted">모의 회차·실제 발행 잠금·서버 실행 설정을 확인합니다.</p>
+                <p id="hot-live-plan-performance" class="muted"></p>
+                <div id="hot-live-plan-content" hidden>
+                  <h3>적용 범위와 유지할 한도</h3>
+                  <ul id="hot-live-plan-scope"></ul>
+                  <p id="hot-live-plan-selected-costs" class="hot-live-selected-costs"></p>
+                  <p class="muted">현재 예산과 횟수 한도를 유지합니다. 비용 상한은 ETH로 표시합니다. 개발자 매수는 선택할 페어의 자산 수량이므로 자산·소수 자릿수가 확인되기 전에는 ETH로 환산하지 않습니다.</p>
+                  <div class="table-scroll"><table class="hot-live-plan-limits"><thead><tr><th>범위</th><th>한도</th><th>유지 값</th></tr></thead><tbody id="hot-live-plan-limits"></tbody></table></div>
+                  <details id="hot-live-plan-inactive-details"><summary>수동·비선택 경로의 기존 한도 (이 핫레인 경로에 적용하지 않음)</summary><div class="table-scroll"><table class="hot-live-plan-limits"><thead><tr><th>범위</th><th>한도</th><th>기존 값</th></tr></thead><tbody id="hot-live-plan-inactive-limits"></tbody></table></div></details>
+                  <h3>운영자가 완료할 단계</h3>
+                  <ol id="hot-live-plan-steps"></ol>
+                  <ul id="hot-live-plan-checks" class="live-readiness-checks"></ul>
+                  <details><summary>적용할 정책 상세</summary><pre id="hot-live-plan-policy"></pre></details>
+                </div>
+                <p id="hot-live-plan-stage" class="muted">계획을 저장해도 자동 발행은 켜지지 않습니다.</p>
+                <p class="hot-live-money-note">최종 활성화 후 조건을 통과한 후보는 추가 클릭 없이 실제 토큰을 발행하며 가스비와 설정된 개발자 매수 비용이 발생할 수 있습니다. 일시 중지는 이미 전송한 거래를 취소하지 않습니다.</p>
+                <div class="hot-live-setup-actions">
+                  <button id="hot-live-plan-stage-button" class="button subtle" type="button" disabled>검토한 전환 계획 저장</button>
+                  <button id="hot-live-plan-apply" class="button" type="button" disabled>핫레인 자동 실발행 활성화</button>
+                  <button id="hot-live-plan-pause" class="button subtle" type="button" disabled>자동 실발행 일시 중지</button>
+                </div>
+                <p id="hot-live-plan-permission" class="muted">계획 저장·활성화·중지는 관리자 권한이 필요합니다.</p>
+                <section id="hot-live-preflight" class="hot-live-preflight" aria-labelledby="hot-live-preflight-title">
+                  <h3 id="hot-live-preflight-title">개별 발행안 사전 검사</h3>
+                  <p class="muted">저장된 핫레인 직접 발행 초안(Pons V2)과 신호를 지정해 계약·지갑·가스 등 기술 조건을 검사합니다. 모의 제작물은 이 초안에 해당하지 않습니다. 검사 결과는 발행 요청이나 승인이 아닙니다.</p>
+                  <p id="hot-live-preflight-subject" class="muted">아래 후보의 상세 화면에서 ‘이 발행안 검사’를 누르세요. 저장된 초안이 있는 후보에 표시됩니다.</p>
+                  <details><summary>고급 입력: 초안 ID와 신호 키 직접 지정</summary><form id="hot-live-preflight-form">
+                    <label>초안 ID<input id="hot-live-preflight-draft" name="draftId" required maxlength="36" autocomplete="off" placeholder="저장된 초안의 UUID" /></label>
+                    <label>핫레인 신호 키<input id="hot-live-preflight-signal" name="signalKey" required maxlength="200" autocomplete="off" placeholder="검사할 핫레인 신호 키" /></label>
+                    <button id="hot-live-preflight-button" class="button subtle" type="submit" disabled>이 발행안 검사</button>
+                  </form></details>
+                  <p id="hot-live-preflight-status" role="status" class="muted">운영자 또는 관리자 연결 후 검사할 수 있습니다. 화면 갱신으로 검사가 실행되지는 않습니다.</p>
+                  <div id="hot-live-preflight-result" hidden>
+                    <h4>기술 조건</h4><ul id="hot-live-preflight-checks" class="live-readiness-checks"></ul>
+                    <h4>실제 전송 제한</h4><ul id="hot-live-preflight-blockers"></ul>
+                    <details><summary>검사 식별정보</summary><p id="hot-live-preflight-binding" class="muted"></p></details>
+                    <details><summary>가스 견적 상세</summary><pre id="hot-live-preflight-estimate"></pre></details>
+                  </div>
+                </section>
+              </div>
+            </section>
             <p id="hot-lane-unavailable" class="lane-unavailable" role="status">핫 레인 상태를 불러오는 중입니다.</p>
             <div id="hot-lane-panel" class="panel hot-lane-panel" hidden>
               <div class="panel-heading">

@@ -3317,6 +3317,39 @@ th,
 
 /* Hot lane: compact status panel directly under the radar stats. */
 .hot-lane-panel { margin-bottom: 20px; }
+.live-readiness-panel { margin-bottom: 20px; }
+.live-readiness-panel .panel-heading { align-items: flex-start; gap: 16px; }
+.live-readiness-panel .panel-heading button { flex-shrink: 0; }
+.live-readiness-settings, .live-readiness-note { margin: 12px 24px 18px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.live-readiness-settings { white-space: pre-line; }
+.live-readiness-checks { list-style: none; margin: 0 24px; padding: 0; }
+.live-readiness-checks li { display: grid; gap: 4px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.live-readiness-checks .pass strong { color: var(--lime); }
+.live-readiness-checks .blocked strong { color: var(--warning); }
+.hot-live-plan-body { padding: 0 24px 24px; font-size: 13px; line-height: 1.7; }
+.hot-live-plan-body h3 { margin: 24px 0 10px; font-size: 15px; }
+.hot-live-plan-body h4 { margin: 18px 0 8px; }
+.hot-live-plan-body ul, .hot-live-plan-body ol { padding-left: 22px; }
+.hot-live-plan-body li { margin: 6px 0; overflow-wrap: anywhere; }
+.hot-live-plan-body li p { margin: 4px 0 12px; }
+.hot-live-plan-body .live-readiness-checks { margin: 16px 0; padding: 0; }
+.hot-live-plan-body details { margin: 16px 0; }
+.hot-live-plan-body summary { cursor: pointer; }
+.hot-live-plan-body pre { max-height: 300px; overflow: auto; padding: 14px; border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.hot-live-plan-limits { width: 100%; min-width: 430px; font-size: 12px; }
+.hot-live-plan-limits th, .hot-live-plan-limits td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.hot-live-plan-limits td:last-child { font-variant-numeric: tabular-nums; }
+.hot-live-money-note { margin: 20px 0 16px; padding: 14px 16px; border-left: 3px solid var(--warning); background: var(--surface); }
+.hot-live-setup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+#hot-live-plan-environment, #hot-live-plan-stage, #hot-live-preflight-binding { white-space: pre-line; overflow-wrap: anywhere; }
+.hot-live-selected-costs { white-space: pre-line; overflow-wrap: anywhere; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; font-weight: 600; }
+.hot-live-preflight { margin-top: 28px; padding-top: 4px; border-top: 1px solid var(--border); }
+#hot-live-preflight-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; align-items: end; gap: 12px; margin: 16px 0; }
+#hot-live-preflight-form label { display: grid; gap: 6px; }
+#hot-live-preflight-form input { width: 100%; min-width: 0; }
+@media (max-width: 760px) { #hot-live-preflight-form { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .hot-live-plan-body { padding-inline: 16px; } .hot-live-setup-actions .button { width: 100%; } }
+@media (max-width: 650px) { .live-readiness-panel .panel-heading { flex-direction: column; } .live-readiness-settings, .live-readiness-note, .live-readiness-checks { margin-inline: 16px; } }
 .hot-lane-panel .panel-heading { padding-bottom: 16px; }
 .hot-lane-panel .panel-heading p { overflow-wrap: anywhere; }
 .hot-lane-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }

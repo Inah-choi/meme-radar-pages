@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=9ce9bfc0cb638282ffcc';
-import {createBangerRadar} from './banger-radar.mjs?v=9ce9bfc0cb638282ffcc';
-import {createMyTokens} from './my-tokens.mjs?v=9ce9bfc0cb638282ffcc';
-import {createOriginBuy} from './origin-buy.mjs?v=9ce9bfc0cb638282ffcc';
-import {createPaperTrial} from './paper-trial.mjs?v=9ce9bfc0cb638282ffcc';
-import {API_ORIGIN} from './deployment-config.mjs?v=9ce9bfc0cb638282ffcc';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=9ce9bfc0cb638282ffcc';
+import {createRadarReview} from './radar-review.mjs?v=88ec38bd1491d05743b3';
+import {createBangerRadar} from './banger-radar.mjs?v=88ec38bd1491d05743b3';
+import {createMyTokens} from './my-tokens.mjs?v=88ec38bd1491d05743b3';
+import {createOriginBuy} from './origin-buy.mjs?v=88ec38bd1491d05743b3';
+import {createPaperTrial} from './paper-trial.mjs?v=88ec38bd1491d05743b3';
+import {API_ORIGIN} from './deployment-config.mjs?v=88ec38bd1491d05743b3';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=88ec38bd1491d05743b3';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -23,6 +23,16 @@ const state = {
   hotQuery: null,
   hotLane: null,
   hotLaneError: "",
+  liveReadiness: null,
+  liveReadinessError: "",
+  liveReadinessLoading: false,
+  livePlan: null,
+  livePlanStaged: null,
+  livePlanError: '',
+  livePlanNotice: '',
+  livePlanLoading: false,
+  livePlanAction: '',
+  livePlanEpoch: 0,
   flashLane: null,
   flashLaneError: "",
   flashPreview: null,
@@ -658,6 +668,9 @@ async function api(path, options = {}) {
 }
 function disconnect(notify = true) {
   state.key = "";
+  resetHotLiveSetup();
+  state.liveReadiness = null;
+  state.liveReadinessError = '';
   state.fetchingCandidates++;
   state.hotPosts = null;
   state.hotOffset = 0;
@@ -689,7 +702,7 @@ function updateAlert() {
     );
   if (policy.mode === "AUTO")
     alerts.push(
-      `${policy.network === "mainnet" ? "메인넷" : "테스트넷"} AUTO 활성화: 허용된 정책에 따라 실제 트랜잭션이 자동 전송됩니다.`,
+      `AUTO 모드 · ${liveBroadcastNote()}`,
     );
   if (state.lastError) alerts.push(state.lastError);
   $("#global-alert").textContent = alerts.join(" ");
@@ -780,7 +793,7 @@ async function refresh({ silent = false } = {}) {
     else renderOverview();
     await refreshDraftStatus();
     if (state.page === "radar") await fetchCandidates();
-    if (state.page === "hot-lane") await fetchHotLane();
+    if (state.page === "hot-lane") await Promise.allSettled([fetchHotLane(), fetchLiveReadiness(), fetchHotLivePlan()]);
     if (state.page === "flash") await fetchFlashLane();
     if (state.page === "bangers") await bangerRadar.refresh({ silent: true });
     if (state.page === "my-tokens") void myTokens.refresh();
@@ -865,6 +878,12 @@ const HOT_QUALITY_LABELS = { candidate: '뱅어 후보', watch: '관찰', crowde
 const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문', D: 'D · 실측 반응 증가' };
 const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
 const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
+Object.assign(HOT_HOLD_REASONS, {
+  HOT_REVIEW_IMAGE_UNAVAILABLE: '원문 이미지 파일을 확인하지 못함',
+  HOT_REVIEW_IMAGE_NOT_INSPECTED: '이미지를 전달했지만 실제 검토 응답을 확인하지 못함',
+  HOT_REVIEW_IMAGE_CITATION_INVALID: '이미지 검토 응답과 전달한 원문이 일치하지 않음',
+  HOT_REVIEW_FAILED: '편집 검토 실행 실패', HOT_REVIEW_TIMEOUT: '편집 검토 시간 초과',
+});
 let hotLaneFetchSequence = 0;
 function hotLaneSourceSignal(signal) { return /^source[0-9a-f]{24}$/i.test(String(signal.key || '')); }
 function hotLaneHasLaunchHistory(signal) { return Boolean(signal.draftId || signal.launchedLaunchId || ['launching', 'launched'].includes(signal.state)); }
@@ -874,9 +893,11 @@ function hotLaneReviewedTitle(signal) {
 }
 function hotLaneVisible(signal) {
   if (!hotLaneSourceSignal(signal) || hotLaneHasLaunchHistory(signal)) return true;
+  if ((state.hotLaneFilter === 'watch' || String(state.hotLaneQuery || '').trim()) && signal.tracking?.readOnly === true) return true;
   return signal.quality?.eligible === true && signal.quality?.editorial?.verdict === 'pass' && Boolean(hotLaneReviewedTitle(signal));
 }
 function hotLaneTitle(signal) {
+  if (signal.tracking?.historical === true && signal.tracking.readOnly === true) return `관찰 기록 · ${String(signal.tracking.title || '원문 검토').slice(0, 60)}`;
   if (!hotLaneSourceSignal(signal)) return String(signal.label || signal.key || '—').slice(0, 100);
   return hotLaneReviewedTitle(signal) || (signal.state === 'launched' ? '발행 기록' : '준비된 발행 기록');
 }
@@ -923,22 +944,45 @@ function hotLaneAttention(quality) {
   return section;
 }
 function hotLaneEditorial(quality) {
-  const review = quality.editorial, section = append(node('section', 'hot-editorial'), node('h4', '', 'AI가 찾은 웃음 포인트'));
+  const review = quality.editorial, section = append(node('section', 'hot-editorial'), node('h4', '', 'AI가 확인한 밈 소재'));
   if (!review) { section.append(node('p', 'hot-gate-reasons', 'AI 소재 검토 대기')); section.append(node('p', 'muted', '실측 반응이 확인된 소재부터 웃음 포인트·새로움·이미지 구도를 검토합니다.')); return section; }
   const labels = { pass: 'AI 소재 검토 통과', watch: 'AI 검토 · 추가 관찰', reject: 'AI 검토 · 제외' };
   section.append(node('p', review.verdict === 'pass' ? 'hot-editorial-verdict' : 'hot-gate-reasons', labels[review.verdict] || 'AI 소재 검토 상태 미확인'));
   if (review.topic?.label) section.append(node('p', 'hot-editorial-topic', String(review.topic.label).slice(0, 120)));
-  if (review.angle) section.append(append(node('p'), node('strong', '', '웃음 포인트 · '), node('span', '', String(review.angle).slice(0, 500))));
+  if (review.angle) section.append(append(node('p'), node('strong', '', '밈의 핵심 · '), node('span', '', String(review.angle).slice(0, 500))));
   if (review.whyNow) section.append(append(node('p'), node('strong', '', '왜 지금 · '), node('span', '', String(review.whyNow).slice(0, 600))));
   if (review.summary) section.append(node('p', '', String(review.summary).slice(0, 800)));
   const scores = node('div', 'hot-editorial-scores');
-  for (const [key, label] of [['memeClarity', '웃음 명확성'], ['distinctiveness', '차별성'], ['visualHook', '이미지 구도'], ['culturalFit', '문화적 맥락']]) {
+  for (const [key, label] of [['memeClarity', '밈 명확성'], ['distinctiveness', '차별성'], ['visualHook', '이미지 구도'], ['culturalFit', '문화적 맥락']]) {
     const value = review.scores?.[key], known = finite(value) && Number(value) >= 0 && Number(value) <= 5;
     scores.append(append(node('div'), node('span', 'muted', label), node('strong', '', known ? `${value}/5` : '미확인')));
   }
   section.append(scores);
   if (list(review.risks).length) { const risks = node('ul', 'hot-editorial-risks'); for (const risk of list(review.risks).slice(0, 4)) risks.append(node('li', '', String(risk).slice(0, 400))); section.append(risks); }
   section.append(node('p', 'muted', `AI 편집 점수이며 예상 거래량이 아닙니다.${review.reviewedAt ? ` 검토 ${date(review.reviewedAt)}` : ''}${review.expiresAt ? ` · 재검토 기준 ${date(review.expiresAt)}` : ''}`));
+  return section;
+}
+function hotLaneReviewHistory(signal) {
+  const saved = signal.tracking, section = append(node('section', 'hot-review-history'), node('h4', '', '관찰·재평가 기록'));
+  const visualRecord = saved?.visualEvidence || signal.quality?.editorial?.visualEvidence;
+  const visual = list(Array.isArray(visualRecord) ? visualRecord : visualRecord?.items);
+  if (saved?.readOnly === true) {
+    section.append(node('p', 'muted', `${({pass:'당시 검토 통과',watch:'추가 관찰',reject:'소재 제외',error:'검토 오류'})[saved.verdict] || '상태 미확인'} · ${date(saved.reviewedAt)} · 과거 판단은 현재 발행 허용을 뜻하지 않습니다.`));
+    if (saved.summary) section.append(node('p', '', String(saved.summary).slice(0, 600)));
+    if (list(saved.reasons).length) section.append(node('p', 'hot-gate-reasons', saved.reasons.map(reason => HOT_HOLD_REASONS[reason] || String(reason)).join(' · ').slice(0, 800)));
+    const reassessment = saved.reassessment;
+    if (reassessment) section.append(node('p', 'muted', `재평가 · ${({new_measured_growth:'새 실측 반응 증가',new_measured_endpoint:'새 비교 관측 확보',new_related_evidence:'직접 연결된 후속 원문',source_evidence_changed:'원문·첨부 근거 변경'})[reassessment.trigger] || '새 근거 확인'}${reassessment.previousVerdict ? ` · 이전 ${{pass:'통과',watch:'관찰',reject:'제외',error:'오류'}[reassessment.previousVerdict] || '미확인'}` : ''}`));
+  }
+  if (!visual.length) {
+    const attachmentStates = list(visualRecord?.attachmentStates);
+    const absent = attachmentStates.length > 0 && attachmentStates.every(item => item.attachmentStatus === 'none');
+    section.append(node('p', 'muted', absent ? '선택한 원문의 첨부 이미지 없음 확인' : '이미지 확인 기록 없음 · 첨부 여부 미검증'));
+  }
+  for (const item of visual.slice(0, 6)) {
+    const status = ({viewed:'원문 이미지 검토 완료',reviewed:'원문 이미지 검토 완료',prepared:'이미지 전달 준비 완료 · 실제 검토 미검증',none:'첨부 이미지 없음 확인',unknown:'첨부 여부 미검증',failed:'원문 이미지 검토 실패',unverified:'원문 이미지 미검증'})[item.status] || '이미지 확인 상태 미검증';
+    const reason = item.reason || item.errorCode;
+    section.append(node('p', 'muted', `${status}${reason ? ` · ${String(reason).slice(0,160)}` : ''}`));
+  }
   return section;
 }
 function hotLaneEvidence(signal, bucket) {
@@ -954,7 +998,7 @@ function hotLaneEvidence(signal, bucket) {
   const summary = node('summary', '', `산출 근거 · X 원문 ${evidence.length}건${competitors.length ? ` · 비교 토큰 ${competitors.length}개` : ''}`);
   const body = node('div', 'hot-evidence-body');
   append(detail, summary, body);
-  append(body, hotLaneEditorial(quality), hotLaneAttention(quality));
+  append(body, hotLaneEditorial(quality), hotLaneReviewHistory(signal), hotLaneAttention(quality));
   const assessment = node('div', 'hot-evidence-assessment');
   for (const [title, values, style] of [['확인된 강점', quality.strengths, 'strength'], ['검토할 점', quality.cautions, 'caution']]) {
     if (!list(values).length) continue;
@@ -973,7 +1017,7 @@ function hotLaneEvidence(signal, bucket) {
     signals.append(append(node('p'), node('strong', '', HOT_SIGNAL_LABELS[kind] || String(kind)), node('span', '', ` — ${description}`)));
   }
   if (!currentClasses.length) signals.append(node('p', 'muted', '현재 유효한 교차 신호가 확인되지 않았습니다.'));
-  signals.append(node('p', 'muted', 'A는 유사 토큰의 발행 신호이며 매수 수요를 뜻하지 않습니다.')); 
+  signals.append(node('p', 'muted', 'A는 유사 토큰의 발행 신호이며 매수 수요를 뜻하지 않습니다.'));
   body.append(signals);
   const posts = append(node('section', 'hot-source-section'), node('h4', '', 'X 원문'));
   if (!evidence.length) posts.append(node('p', 'hot-no-evidence', '수집된 X 원문 없음 · 토큰 이름이 반복된 것만으로는 뱅어 후보로 판단하지 않습니다.'));
@@ -1046,6 +1090,23 @@ function hotLaneCard(signal) {
   context.append(node('h4', '', detailTitle));
   if (!hotLaneSourceSignal(signal) && signal.label && signal.key && signal.label !== signal.key) context.append(node('p', 'muted', `소재 키: ${String(signal.key).slice(0, 100)}`));
   context.append(node('p', 'muted', `상태: ${stateLabel} · ${date(signal.armedAt || signal.updatedAt || signal.primedAt)}`));
+  if (signal.draftId) {
+    const inspect = node('button', 'button small subtle hot-preflight-trigger', '이 발행안 검사');
+    inspect.type = 'button';
+    inspect.disabled = hotLivePlanCurrent()?.capabilities?.canPreflight !== true || state.livePreflightLoading || Boolean(state.livePlanAction);
+    inspect.title = '저장된 핫레인 직접 발행 초안을 검사합니다. 발행하거나 모의 제작물을 실제 초안으로 바꾸지 않습니다.';
+    const connection = hotLiveConnection();
+    inspect.addEventListener('click', async event => {
+      event?.preventDefault(); event?.stopPropagation();
+      if (inspect.disabled || !hotLiveConnectionMatches(connection) || hotLivePlanCurrent()?.capabilities?.canPreflight !== true || state.livePreflightLoading || state.livePlanAction) return;
+      $('#hot-live-preflight-draft').value = String(signal.draftId);
+      $('#hot-live-preflight-signal').value = String(signal.key);
+      $('#hot-live-preflight-subject').textContent = `검사 대상: ${hotLaneTitle(signal)}`;
+      $('#hot-live-preflight').scrollIntoView?.({block:'start',behavior:'smooth'});
+      await runHotLivePreflight();
+    });
+    context.append(inspect);
+  }
   const reason = HOT_HOLD_REASONS[signal.heldCode] || (signal.state === 'primed' ? `교차 확인 대기 · ${Array.isArray(quality.currentClasses) ? '현재 유효 신호' : '이전에 포착한 신호'} ${Array.isArray(quality.currentClasses) ? list(quality.currentClasses).length : list(signal.classes).length}종류` : signal.heldCode ? '발행 조건 확인 필요' : '');
   if (reason) context.append(node('p', 'lane-signal-reason', reason));
   const lead = (bucket === 'candidate' ? list(quality.strengths)[0] : list(quality.cautions)[0]) || (bucket === 'insufficient' ? '원문 근거와 중복 정도를 더 확인해야 합니다.' : '원문 근거와 경쟁 토큰을 확인한 뒤 검토하세요.');
@@ -1069,6 +1130,267 @@ function hotLaneAdmin() {
 function hotLanePaused(lane) {
   const until = Date.parse(lane?.pausedUntil || '');
   return Number.isFinite(until) && until > Date.now();
+}
+function liveBroadcastNote() {
+  if (state.overview?.network?.dryRun === true) return '모의 실행 설정으로 실제 전송이 차단됩니다.';
+  if (!state.liveReadinessError && state.liveReadiness?.settings?.liveLocked === true) return '실제 발행 잠금이 유지되고 있습니다.';
+  return '발행 요청 시 서버가 실제 발행 잠금·네트워크·지갑·정책을 다시 확인합니다.';
+}
+function liveSettingLabel(value) { return value === true ? '켜짐' : value === false ? '꺼짐' : '미확인'; }
+async function fetchLiveReadiness() {
+  if (state.page !== 'hot-lane' || !state.key || state.liveReadinessLoading) return;
+  const origin = state.apiOrigin, key = state.key;
+  state.liveReadinessLoading = true;
+  renderLiveReadiness();
+  try {
+    const result = await api('/api/hot-lane/live-readiness');
+    if (state.apiOrigin !== origin || state.key !== key) return;
+    if (result?.version !== 1 || !['blocked', 'unverified', 'ready'].includes(result.status) || !Array.isArray(result.checks))
+      throw new Error('실전 준비 점검 응답을 확인할 수 없습니다.');
+    state.liveReadiness = result;
+    state.liveReadinessError = '';
+  } catch (error) {
+    if (state.apiOrigin !== origin || state.key !== key) return;
+    state.liveReadiness = null;
+    state.liveReadinessError = error.status === 404
+      ? '새 점검 기능은 서버 업데이트 후 사용할 수 있습니다. 현재 실전 준비는 미검증입니다.'
+      : `실전 준비 미검증 · ${error.message}`;
+  } finally {
+    state.liveReadinessLoading = false;
+    renderLiveReadiness();
+  }
+}
+function renderLiveReadiness() {
+  const result = state.liveReadiness, settings = result?.settings || {};
+  const summary = $('#hot-live-summary'), checks = $('#hot-live-checks'), button = $('#hot-live-refresh');
+  button.disabled = !state.key || state.liveReadinessLoading;
+  button.textContent = state.liveReadinessLoading ? '점검 중…' : '실전 점검 갱신';
+  const ready = !state.liveReadinessLoading && result?.status === 'ready' && result.readyForLive === true && result.checks.length > 0 && result.checks.every(check => check.status === 'pass');
+  summary.textContent = state.liveReadinessError || (!result ? '실전 준비 미검증 · 점검 결과를 불러오세요.'
+    : `${result.status === 'blocked' ? '실전 점검: 미해결 항목 있음' : ready ? '실전 준비 점검 통과' : '실전 점검: 미검증 항목 있음'} · 점검 ${date(result.checkedAt)}`);
+  summary.className = `lane-readiness${ready && !state.liveReadinessError ? '' : ' warning'}`;
+  const settingsNode = $('#hot-live-settings');
+  settingsNode.textContent = result ? `실제 설정 · 핫레인 후보 처리 ${liveSettingLabel(settings.hotEnabled)} · 플래시 발행 ${liveSettingLabel(settings.flashEnabled)} · 핫레인→플래시 자동 연결 ${liveSettingLabel(settings.autoHot)} · 선택 경로 ${settings.route === 'flash' ? '플래시' : settings.route === 'direct' ? '직접 발행' : '미확인'}\n${display(settings.mode, '모드 미확인')} · 모의 실행 차단 ${liveSettingLabel(settings.effectiveDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)} · ${display(settings.network, '네트워크 미확인')}` : '현재 회차의 모의 설정과 실제 자동 발행 설정을 따로 확인합니다.';
+  checks.replaceChildren(...list(result?.checks).map(check => append(node('li', `live-check ${['pass', 'blocked'].includes(check.status) ? check.status : 'unverified'}`),
+    node('strong', '', `${({ pass: '통과', blocked: '차단', unverified: '미검증' })[check.status] || '미검증'} · ${display(check.label, '확인 항목')}`),
+    node('span', 'muted', display(check.detail, '세부 정보 미확인')))));
+}
+const HOT_LIVE_LIMIT_LABELS = {
+  maxPerLaunchWei: '발행 1건 비용', maxDailyCostWei: '일일 총비용', maxDailyLaunches: '일일 발행 횟수',
+  minLaunchIntervalSeconds: '최소 발행 간격(초)', keyCooldownSeconds: '소재별 대기시간(초)', maxPerHour: '시간당 발행 횟수', maxPerDay: '일일 발행 횟수',
+  devBuyWei: '개발자 매수', hotDevBuyWei: '핫레인 개발자 매수', maxDevBuyWei: '개발자 매수 상한',
+};
+function resetHotLiveSetup() {
+  state.livePlanEpoch = (state.livePlanEpoch || 0) + 1;
+  state.livePlan = null; state.livePlanStaged = null; state.livePlanConnection = null;
+  state.livePlanError = ''; state.livePlanNotice = ''; state.livePlanLoading = false; state.livePlanAction = '';
+  state.livePreflight = null; state.livePreflightError = ''; state.livePreflightLoading = false;
+  state.livePreflightSequence = (state.livePreflightSequence || 0) + 1;
+}
+function hotLiveConnection() { return { key: state.key, origin: state.apiOrigin, epoch: state.livePlanEpoch || 0 }; }
+function hotLiveConnectionMatches(value) {
+  return Boolean(state.key && value && value.key === state.key && value.origin === state.apiOrigin && value.epoch === (state.livePlanEpoch || 0));
+}
+function hotLivePlanCurrent() { return hotLiveConnectionMatches(state.livePlanConnection) ? state.livePlan : null; }
+function validateHotLivePlan(value) {
+  if (!value || value.version !== 1 || !['preview', 'staged'].includes(value.state) || !['flash', 'direct'].includes(value.route) ||
+      typeof value.activationBlocked !== 'boolean' || !Array.isArray(value.checks) || !Array.isArray(value.operatorSteps) ||
+      !value.limits || typeof value.bindingHash !== 'string' || !value.bindingHash || typeof value.planHash !== 'string' || !value.planHash ||
+      value.policyPatch?.automaticLaunchScope !== 'hot_only' || value.policyPatch.mode !== 'AUTO' || value.policyPatch.hotLane?.enabled !== true ||
+      value.policyPatch.flashLane?.autoTier0 !== false || value.policyPatch.flashLane?.autoHot !== (value.route === 'flash') ||
+      value.policyPatch.originBuy?.enabled !== false || value.policyPatch.originBuy?.exitsEnabled !== false || value.policyPatch.liquidityEnabled !== false)
+    throw new Error('핫레인 전용 전환 계획을 확인할 수 없습니다. 다시 조회하세요.');
+  return value;
+}
+function hotLivePlanCanApply() {
+  const plan = hotLivePlanCurrent(), staged = state.livePlanStaged;
+  return Boolean(plan?.capabilities?.canManage === true && !state.livePlanLoading && !state.livePlanAction && !state.livePlanError &&
+    plan.activationBlocked === false && staged?.activationBlocked === false && staged.state === 'staged' && typeof staged.planId === 'string' && staged.planId &&
+    plan.bindingHash === staged.bindingHash && plan.planHash === staged.planHash && Date.parse(staged.expiresAt) > Date.now() &&
+    plan.settings?.rawDryRun === false && plan.settings?.effectiveDryRun === false && plan.settings?.liveLocked === false &&
+    plan.trial?.status !== 'running' && plan.checks.length > 0 && plan.checks.every(check => check.status === 'pass'));
+}
+async function fetchHotLivePlan() {
+  if (state.page !== 'hot-lane' || !state.key || state.livePlanLoading || state.livePlanAction) return;
+  const connection = hotLiveConnection();
+  state.livePlanLoading = true; renderHotLiveSetup();
+  try {
+    const plan = validateHotLivePlan(await api('/api/hot-lane/live-plan'));
+    if (!hotLiveConnectionMatches(connection)) return;
+    if (state.livePlanStaged && (state.livePlanStaged.bindingHash !== plan.bindingHash || state.livePlanStaged.planHash !== plan.planHash)) {
+      state.livePlanStaged = null; state.livePlanNotice = '설정 또는 회차가 바뀌었습니다. 변경된 계획을 확인하고 다시 저장하세요.';
+    }
+    state.livePlan = plan; state.livePlanConnection = connection; state.livePlanError = '';
+  } catch (error) {
+    if (!hotLiveConnectionMatches(connection)) return;
+    state.livePlan = null; state.livePlanStaged = null;
+    state.livePlanError = error.status === 404 ? '전환 기능은 서버 업데이트 후 사용할 수 있습니다. 현재 활성화할 수 없습니다.' : `전환 계획 미검증 · ${error.message}`;
+  } finally {
+    if (hotLiveConnectionMatches(connection)) { state.livePlanLoading = false; renderHotLiveSetup(); }
+  }
+}
+function hotLiveAmountLabel(key, value) {
+  if (value === null || value === undefined) return '미확인';
+  if (['maxPerLaunchWei','maxDailyCostWei'].includes(key)) return /^\d+$/.test(String(value)) ? `${exactEth(value)} ETH (${value} wei)` : '미확인';
+  if (['devBuyWei','hotDevBuyWei','maxDevBuyWei'].includes(key)) return String(value) === '0' ? '없음 (0)' : `${value} 페어 자산 원시 단위`;
+  return String(value);
+}
+function hotLiveLimitRows(plan) {
+  return Object.entries(plan?.limits || {}).flatMap(([scope, limits]) => Object.entries(limits || {})
+    .filter(([, value]) => value == null || ['string','number'].includes(typeof value))
+    .map(([key, value]) => ({scope,key,value,active: !(scope === 'flash' && (plan.route !== 'flash' || key === 'devBuyWei') || scope === 'hot' && plan.route === 'flash' && key === 'devBuyWei')})));
+}
+function hotLiveLimitsText(plan) {
+  return hotLiveLimitRows(plan).filter(row => row.active).map(({scope,key,value}) => `${({global:'전체',hot:'핫레인',flash:'플래시'})[scope] || scope} ${HOT_LIVE_LIMIT_LABELS[key] || key}: ${hotLiveAmountLabel(key,value)}`).join('\n');
+}
+function hotLiveSelectedCosts(plan) {
+  if (!plan) return '';
+  const global = plan.limits.global || {}, hot = plan.limits.hot || {}, flash = plan.limits.flash || {};
+  const minimum = values => {
+    if (!values.every(value => value !== null && value !== undefined && /^\d+$/.test(String(value)))) return null;
+    return values.map(value => BigInt(value)).reduce((a,b) => a < b ? a : b).toString();
+  };
+  const routed = plan.route === 'flash';
+  const hour = minimum([hot.maxPerHour,...(routed ? [flash.maxPerHour] : [])]);
+  const day = minimum([global.maxDailyLaunches,hot.maxPerDay,...(routed ? [flash.maxPerDay] : [])]);
+  const cap = minimum([global.maxPerLaunchWei,hot.maxPerLaunchWei,...(routed ? [flash.maxPerLaunchWei] : [])]);
+  return `선택한 ${routed ? '플래시' : '직접 발행'} 경로 · 시간당 최대 ${hour ?? '미확인'}건 · 하루 최대 ${day ?? '미확인'}건\n발행 1건 비용 상한 ${hotLiveAmountLabel('maxPerLaunchWei',cap)} · 개발자 매수 ${hotLiveAmountLabel('devBuyWei',routed ? flash.hotDevBuyWei : hot.devBuyWei)}`;
+}
+function renderHotLiveSetup() {
+  const plan = hotLivePlanCurrent(), staged = state.livePlanStaged, busy = state.livePlanLoading || Boolean(state.livePlanAction);
+  const manage = plan?.capabilities?.canManage === true, settings = plan?.settings || {};
+  const liveKnown = ['AUTO','PAPER','WATCH'].includes(settings.mode) && [settings.hotEnabled,settings.rawDryRun,settings.liveLocked].every(value => typeof value === 'boolean');
+  const liveOn = liveKnown && settings.mode === 'AUTO' && settings.hotEnabled && !settings.rawDryRun && !settings.liveLocked;
+  $('#hot-live-plan-refresh').disabled = !state.key || busy;
+  $('#hot-live-plan-refresh').textContent = state.livePlanLoading ? '계획 조회 중…' : '전환 계획 조회';
+  $('#hot-live-plan-status').textContent = state.livePlanError || (state.livePlanAction ? '요청 결과를 확인하는 중…' : state.livePlanNotice || (!plan ? '전환 계획 미검증 · 서버에서 현재 조건을 확인하세요.'
+    : plan.activationBlocked ? '활성화 차단 중 · 아래 준비 단계를 완료한 뒤 계획을 다시 확인하세요.' : '전환 계획 확인 가능 · 저장한 계획에 대한 최종 확인이 필요합니다.'));
+  $('#hot-live-plan-content').hidden = !plan;
+  $('#hot-live-plan-environment').textContent = plan ? `핫레인 실제 자동 발행 설정: ${liveKnown ? liveOn ? '켜짐' : '꺼짐' : '미확인'}${settings.paused || settings.emergencyStop ? ' · 일시정지 또는 긴급정지 중' : ''}\n현재 ${display(settings.mode, '모드 미확인')} · ${display(settings.network, '네트워크 미확인')} · 서버 DRY_RUN ${liveSettingLabel(settings.rawDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)}${plan.trial ? `\n모의 회차 ${plan.trial.id} · ${({running:'진행 중',completed:'완료',cancelled:'취소'})[plan.trial.status] || plan.trial.status} · 종료 ${date(plan.trial.endsAt)}` : ''}` : '모의 회차·실제 발행 잠금·서버 실행 설정을 확인합니다.';
+  const performance = plan?.performance, samples = performance?.samples;
+  $('#hot-live-plan-performance').textContent = plan ? `지난 모의 회차: 실제 표본 ${Number.isSafeInteger(samples) && samples >= 0 ? `${samples}건` : '미확인'} · 수신→기록 p95 ${!Number.isSafeInteger(samples) || samples < 20 ? '미검증(표본 20건 미만 또는 미확인)' : performance?.p95Ms != null ? `${performance.p95Ms} ms` : '미검증'}. 게시→수신 지연은 별도입니다. 과거 성능 기록은 현재 후보의 발행 허용 여부를 대신하지 않습니다.` : '';
+  const patch = plan?.policyPatch || {};
+  const scope = plan ? [
+    `자동 발행 범위: 핫레인만 (hot_only) · ${plan.route === 'flash' ? '플래시 경로' : '직접 발행 경로'}`,
+    '일반·창작·코어 자동 발행: hot_only 정책으로 차단',
+    `핫레인 후보 처리: ${liveSettingLabel(patch.hotLane?.enabled)} · 플래시 핫레인 자동 연결: ${liveSettingLabel(patch.flashLane?.autoHot)}`,
+    `Tier0 자동 발행: ${liveSettingLabel(patch.flashLane?.autoTier0)} · 원본 매수: ${liveSettingLabel(patch.originBuy?.enabled)} · 유동성 작업: ${liveSettingLabel(patch.liquidityEnabled)}`,
+  ] : [];
+  $('#hot-live-plan-scope').replaceChildren(...scope.map(text => node('li', '', text)));
+  $('#hot-live-plan-selected-costs').textContent = hotLiveSelectedCosts(plan);
+  const limitRows = hotLiveLimitRows(plan), renderLimit = ({scope,key,value}) => append(node('tr'),
+    node('td', '', ({global:'전체',hot:'핫레인',flash:'플래시'})[scope] || scope), node('td', '', scope === 'flash' && key === 'devBuyWei' ? '수동 플래시 개발자 매수' : HOT_LIVE_LIMIT_LABELS[key] || key), node('td', '', hotLiveAmountLabel(key,value)));
+  $('#hot-live-plan-limits').replaceChildren(...limitRows.filter(row => row.active).map(renderLimit));
+  $('#hot-live-plan-inactive-limits').replaceChildren(...limitRows.filter(row => !row.active).map(renderLimit));
+  $('#hot-live-plan-inactive-details').hidden = !limitRows.some(row => !row.active);
+  $('#hot-live-plan-steps').replaceChildren(...list(plan?.operatorSteps).map(step => append(node('li'), node('strong', '', `${step.required ? '필수 · ' : ''}${display(step.label, step.id)}`), node('p', 'muted', display(step.detail, '서버 안내를 확인하세요.')))));
+  $('#hot-live-plan-checks').replaceChildren(...list(plan?.checks).map(check => append(node('li', check.status === 'pass' ? 'pass' : 'blocked'), node('strong', '', `${check.status === 'pass' ? '통과' : check.status === 'blocked' ? '차단' : '미검증'} · ${display(check.label, check.id)}`), node('span', 'muted', display(check.detail, '세부 정보 미확인')))));
+  $('#hot-live-plan-policy').textContent = plan ? JSON.stringify(patch, null, 2) : '';
+  const expired = staged && !(Date.parse(staged.expiresAt) > Date.now());
+  $('#hot-live-plan-stage').textContent = staged ? `저장한 계획 ${staged.planId} · ${expired ? '유효기간 만료 · 다시 저장하세요.' : `유효기간 ${date(staged.expiresAt)}`}${staged.activationBlocked ? ' · 활성화 차단 중' : ''}` : '계획을 저장해도 자동 발행은 켜지지 않습니다.';
+  $('#hot-live-plan-stage-button').disabled = !plan || !manage || busy;
+  $('#hot-live-plan-apply').disabled = !hotLivePlanCanApply();
+  $('#hot-live-plan-apply').title = hotLivePlanCanApply() ? '최종 확인 후 실제 자동 발행 정책을 켭니다.' : '준비 조건을 모두 통과한 유효한 저장 계획과 관리자 권한이 필요합니다.';
+  $('#hot-live-plan-pause').disabled = !plan || !manage || busy;
+  $('#hot-live-plan-permission').textContent = manage ? '관리자 연결 · 활성화 요청 시 서버가 회차·잠금·설정·예산을 다시 검사합니다.' : '조회 전용 · 계획 저장·활성화·중지는 관리자 권한이 필요합니다.';
+  renderHotLivePreflight();
+}
+async function runHotLivePlanAction(action) {
+  const plan = hotLivePlanCurrent(), connection = hotLiveConnection();
+  if (!plan || plan.capabilities?.canManage !== true || state.livePlanAction || state.livePlanLoading) return;
+  const staged = state.livePlanStaged;
+  if (action === 'apply') {
+    if (!hotLivePlanCanApply()) return;
+    if (!confirm(`핫레인 자동 실발행 활성화\n\n계획 ${staged.planId}\n핫레인만 자동 발행합니다. 일반·창작·코어 자동 발행, Tier0 자동 발행, 원본 매수와 유동성 작업은 차단됩니다.\n\n${hotLiveLimitsText(staged)}\n\n활성화 후 후보가 조건을 통과하면 추가 클릭 없이 실제 토큰 발행과 가스비·설정된 개발자 매수 비용이 발생할 수 있습니다. 이미 전송한 거래는 취소할 수 없습니다.\n\n이 계획으로 핫레인 자동 실발행을 활성화하시겠습니까?`)) return;
+    if (!hotLiveConnectionMatches(connection) || state.livePlanStaged !== staged || !hotLivePlanCanApply()) return;
+  }
+  if (!['stage', 'apply', 'pause'].includes(action)) return;
+  state.livePlanAction = action; state.livePlanError = ''; state.livePlanNotice = ''; renderHotLiveSetup();
+  let reload = false;
+  try {
+    const path = action === 'stage' ? '/api/hot-lane/live-plan' : `/api/hot-lane/live-plan/${action}`;
+    const body = action === 'stage' ? (plan.trial?.id ? {sessionId:plan.trial.id} : {}) : action === 'apply' ? {planId:staged.planId,planHash:staged.planHash,confirmation:'ENABLE_HOT_LIVE'} : {};
+    const result = await api(path, {method:'POST', body});
+    if (!hotLiveConnectionMatches(connection)) return;
+    if (action === 'stage') {
+      validateHotLivePlan(result);
+      if (result.state !== 'staged' || !result.planId || !(Date.parse(result.expiresAt) > Date.now())) throw new Error('저장된 계획을 확인하지 못했습니다. 다시 조회하세요.');
+      state.livePlan = result; state.livePlanConnection = connection; state.livePlanStaged = result;
+      state.livePlanNotice = result.activationBlocked ? '계획 저장 완료 · 준비 조건이 충족되지 않아 실제 활성화는 차단됩니다.' : '계획 저장 완료 · 범위와 비용을 확인한 뒤 최종 활성화 버튼을 누르세요.';
+    } else {
+      if (action === 'apply' ? result?.applied !== true : result?.paused !== true) throw new Error('서버의 처리 결과를 확인하지 못했습니다. 상태를 다시 조회하세요.');
+      state.livePlanStaged = null;
+      if (state.overview && result.policy) state.overview.policy = result.policy;
+      state.livePlanNotice = action === 'apply' ? '핫레인 자동 실발행 정책을 활성화했습니다. 실제 발행 결과는 발행 기록에서 확인하세요.' : '자동 실발행을 일시 중지했습니다. 이미 전송한 거래는 발행 기록에서 확인하세요.';
+      reload = true;
+    }
+  } catch (error) {
+    if (!hotLiveConnectionMatches(connection)) return;
+    state.livePlanStaged = null;
+    state.livePlanError = error.status === 404 ? '이 전환 기능은 서버 업데이트 후 사용할 수 있습니다. 실제 활성화는 차단됩니다.'
+      : `${action === 'apply' ? '활성화 결과 미확인 · 자동 재시도하지 않습니다. 상태와 계획을 다시 조회하세요. ' : '요청 실패 · '}${error.message}`;
+    if (error.status === 404 || error.status === 403) state.livePlan = null;
+  } finally {
+    if (hotLiveConnectionMatches(connection)) { state.livePlanAction = ''; renderHotLiveSetup(); }
+  }
+  if (reload && hotLiveConnectionMatches(connection)) await Promise.allSettled([fetchHotLivePlan(), fetchLiveReadiness(), fetchHotLane()]);
+}
+function renderHotLivePreflight() {
+  const allowed = hotLivePlanCurrent()?.capabilities?.canPreflight === true;
+  const result = state.livePreflight, pending = state.livePreflightLoading;
+  $('#hot-live-preflight-button').disabled = !allowed || pending || Boolean(state.livePlanAction);
+  for (const button of $$('.hot-preflight-trigger')) button.disabled = !allowed || pending || Boolean(state.livePlanAction);
+  $('#hot-live-preflight-button').textContent = pending ? '발행안 검사 중…' : '이 발행안 검사';
+  for (const selector of ['#hot-live-preflight-draft', '#hot-live-preflight-signal']) $(selector).disabled = Boolean(pending);
+  const technical = result?.technicalReady === true && result.checks.length > 0 && result.checks.every(check => check.status === 'pass');
+  $('#hot-live-preflight-status').textContent = state.livePreflightError || (pending ? '지정한 발행안의 조건을 확인하는 중…' : result
+    ? `${technical ? '기술 조건 검사 통과' : '기술 조건 확인 필요'} · ${date(result.checkedAt)} · 발행 요청·승인이 아닙니다.`
+    : allowed ? '검사할 발행안을 직접 지정하세요. 검사는 버튼을 누를 때만 실행됩니다.' : '운영자 또는 관리자 권한과 사전 검사 기능이 필요합니다.');
+  $('#hot-live-preflight-result').hidden = !result;
+  $('#hot-live-preflight-checks').replaceChildren(...list(result?.checks).map(check => append(node('li', check.status === 'pass' ? 'pass' : 'blocked'),
+    node('strong', '', `${check.status === 'pass' ? '통과' : check.status === 'blocked' ? '차단' : '미검증'} · ${display(check.label, check.id)}`),
+    node('span', 'muted', display(check.detail, '세부 정보 미확인')))));
+  const blockers = list(result?.executionBlockers);
+  $('#hot-live-preflight-blockers').replaceChildren(...(result ? blockers.length ? blockers.map(blocker => node('li', '', `${display(blocker.code)} · ${display(blocker.detail, '발행 시 다시 확인합니다.')}`))
+    : [node('li', '', '검사에 기록된 실행 차단 사유 없음 · 실제 발행 허용 여부는 발행 요청 시 다시 검사합니다.')] : []));
+  $('#hot-live-preflight-binding').textContent = result ? `초안 ${result.draftId} · 신호 ${result.signalKey}\n검사 식별값 ${typeof result.fingerprint === 'string' ? result.fingerprint : JSON.stringify(result.fingerprint ?? null)}` : '';
+  $('#hot-live-preflight-estimate').textContent = result ? result.estimate ? JSON.stringify(result.estimate, null, 2) : '가스 견적을 확인하지 못했습니다.' : '';
+}
+async function runHotLivePreflight(event) {
+  event?.preventDefault();
+  if (hotLivePlanCurrent()?.capabilities?.canPreflight !== true || state.livePreflightLoading || state.livePlanAction) return;
+  const draftId = $('#hot-live-preflight-draft').value.trim(), signalKey = $('#hot-live-preflight-signal').value.trim();
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(draftId) || !signalKey || signalKey.length > 200) {
+    state.livePreflight = null; state.livePreflightError = '올바른 초안 UUID와 200자 이내의 핫레인 신호 키를 입력하세요.'; renderHotLivePreflight(); return;
+  }
+  const connection = hotLiveConnection(), sequence = (state.livePreflightSequence || 0) + 1;
+  state.livePreflightSequence = sequence; state.livePreflightActive = sequence;
+  state.livePreflightLoading = true; state.livePreflight = null; state.livePreflightError = ''; renderHotLivePreflight();
+  try {
+    const result = await api('/api/hot-lane/live-preflight', {method:'POST', body:{draftId,signalKey}});
+    if (!hotLiveConnectionMatches(connection) || state.livePreflightSequence !== sequence) return;
+    if (result?.version !== 1 || result.draftId !== draftId || result.signalKey !== signalKey || result.submissionAllowed !== false ||
+      typeof result.technicalReady !== 'boolean' || !Array.isArray(result.checks) || !Array.isArray(result.executionBlockers)) throw new Error('이 발행안의 검사 응답을 확인할 수 없습니다.');
+    state.livePreflight = result;
+  } catch (error) {
+    if (!hotLiveConnectionMatches(connection) || state.livePreflightSequence !== sequence) return;
+    state.livePreflight = null;
+    state.livePreflightError = error.status === 404 ? '개별 발행안 검사는 서버 업데이트 후 사용할 수 있습니다.' : `발행안 검사 미검증 · ${error.message}`;
+    if ([403,404].includes(error.status) && state.livePlan?.capabilities) state.livePlan.capabilities = {...state.livePlan.capabilities,canPreflight:false};
+  } finally {
+    if (hotLiveConnectionMatches(connection) && state.livePreflightActive === sequence) { state.livePreflightLoading = false; renderHotLivePreflight(); }
+  }
+}
+function wireHotLiveSetup() {
+  $('#hot-live-plan-refresh').addEventListener('click', () => fetchHotLivePlan());
+  for (const [selector, action] of [['#hot-live-plan-stage-button','stage'], ['#hot-live-plan-apply','apply'], ['#hot-live-plan-pause','pause']])
+    $(selector).addEventListener('click', () => { if (!$(selector).disabled) return runHotLivePlanAction(action); });
+  $('#hot-live-preflight-form').addEventListener('submit', runHotLivePreflight);
+  $('#hot-live-preflight-form').addEventListener('input', () => {
+    state.livePreflightSequence = (state.livePreflightSequence || 0) + 1;
+    $('#hot-live-preflight-subject').textContent = '직접 지정한 발행안 검사';
+    state.livePreflight = null; state.livePreflightError = ''; renderHotLivePreflight();
+  });
 }
 async function fetchHotLane() {
   if (state.page !== 'hot-lane' || !state.key) return;
@@ -1112,7 +1434,7 @@ function renderHotLane() {
   if (hour.max != null && Number(hour.used) >= Number(hour.max)) blockers.push('시간당 발행 한도에 도달했습니다.');
   if (day.max != null && Number(day.used) >= Number(day.max)) blockers.push('오늘 발행 한도에 도달했습니다.');
   readiness.className = `lane-readiness${blockers.length ? ' warning' : ''}`;
-  readiness.textContent = blockers.length ? `현재 실제 발행 불가 · ${blockers.join(' ')}` : '자동 발행 감시 중 · 원문 근거와 중복 조건을 통과한 후보의 이미지·잔액·정책을 확인합니다.';
+  readiness.textContent = blockers.length ? `현재 실제 발행 불가 · ${blockers.join(' ')}` : '핫레인 조건 확인 중 · 실제 발행 가능 여부는 위 실전 준비 점검에서 확인하세요.';
 
   const error = $('#hot-lane-error');
   error.hidden = !state.hotLaneError;
@@ -1145,6 +1467,7 @@ function renderHotLane() {
   const candidateCount = trustedTotals && finite(lane.totalByTier?.candidate) ? Number(lane.totalByTier.candidate) : all.filter(signal => hotLaneBucket(signal) === 'candidate').length;
   const total = trustedTotals && finite(lane.totalSignals) ? Number(lane.totalSignals) : all.length, matched = trustedTotals && finite(lane.matchingSignals) ? Number(lane.matchingSignals) : matching.length;
   $('#hot-lane-selection').textContent = `${candidateCount ? `전체 뱅어 후보 ${candidateCount}건` : '현재 뱅어 후보 조건을 통과한 소재가 없습니다.'} · ${trustedTotals ? '전체' : '현재 응답에서 표시 가능'} ${total}건 · 검색·분류 ${matched}건 · ${signals.length}건 표시${matched > 50 ? ' (최대 50건)' : ''}${filter !== 'all' ? ' · 발행 검토·진행·완료 상태는 검색 범위에서 분류와 관계없이 표시합니다.' : ' · 발행 진행 상태를 먼저, 나머지는 후보 점수와 중복 정도순으로 표시합니다.'}`;
+  if (lane.reviewHistoryIncluded) $('#hot-lane-selection').textContent += ' · 최근 7일 관찰 기록 포함 · 과거 판단은 현재 발행 허용이 아닙니다.';
   $('#hot-lane-empty').hidden = signals.length > 0;
   $('#hot-lane-empty').textContent = total ? '검색·분류 조건에 해당하는 후보가 없습니다.' : '최근 24시간 동안 핫 레인 신호가 없습니다.';
   const admin = hotLaneAdmin(), pause = $('#hot-lane-pause'), resume = $('#hot-lane-resume');
@@ -1232,7 +1555,7 @@ function flashLaunchNote(lane, operator, paused) {
   if (list(preview.holds).length) return list(preview.holds).map(flashReasonText).join(' ');
   if (!preview.previewId || Date.parse(preview.expiresAt) <= Date.now()) return '미리보기 유효 시간이 지났습니다. 다시 준비하세요.';
   if (preview.mode !== lane.mode) return '발행 모드가 바뀌었습니다. 미리보기를 다시 실행하세요.';
-  return lane.mode === 'AUTO' ? '준비 완료 · 발행을 누르면 이 이름과 이미지로 실제 메인넷에 바로 전송합니다.' : 'PAPER 모드 · 이 이름과 이미지로 모의 발행합니다. 실제 전송은 없습니다.';
+  return lane.mode === 'AUTO' ? `AUTO 모드 · ${liveBroadcastNote()}` : 'PAPER 모드 · 이 이름과 이미지로 모의 발행합니다. 실제 전송은 없습니다.';
 }
 function flashPrewarmText(lane) {
   const pre = lane.prewarm, error = lane.prewarmError ? ` · 예열 오류: ${String(lane.prewarmError).slice(0, 160)}` : '';
@@ -1264,6 +1587,7 @@ function renderFlashLane() {
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   if (lane.emergencyStop) parts.push('긴급 정지 중'); else if (lane.paused) parts.push('자동화 일시정지 중');
   parts.push(lane.autoTier0 ? '티어0 자동 트리거 켜짐' : '티어0 자동 트리거 꺼짐');
+  parts.push(`핫레인→플래시 자동 연결 ${liveSettingLabel(state.overview?.policy?.flashLane?.autoHot ?? lane.autoHot)}`);
   $('#flash-lane-summary').textContent = parts.join(' · ');
   $('#flash-lane-prewarm').textContent = flashPrewarmText(lane);
   const latency = lane.latency || {};
@@ -3768,6 +4092,7 @@ $("#login-form").addEventListener("submit", async (event) => {
     if (!key) return;
     try {
       const origin = normalizeApiOrigin($('#api-origin').value, location.origin);
+      resetHotLiveSetup();
       state.apiOrigin = origin;
       state.key = key;
       updateApiConnectionLinks(origin);
@@ -3861,6 +4186,8 @@ $('#hot-lane-resume').addEventListener('click', () => busy($('#hot-lane-resume')
   if (state.overview && policy?.hotLane) state.overview.policy = policy;
   toast('핫 레인을 재개했습니다. 정책의 시간당·일별 한도를 그대로 적용합니다.');
 }).then(() => fetchHotLane()));
+$('#hot-live-refresh').addEventListener('click', () => fetchLiveReadiness());
+wireHotLiveSetup();
 for (const item of $$("[data-refresh]"))
   item.addEventListener("click", () => busy(item, () => refresh()));
 wireFlashLane();
