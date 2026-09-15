@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=72357af73c2689b52420';
-import {createBangerRadar} from './banger-radar.mjs?v=72357af73c2689b52420';
-import {createMyTokens} from './my-tokens.mjs?v=72357af73c2689b52420';
-import {createOriginBuy} from './origin-buy.mjs?v=72357af73c2689b52420';
-import {createPaperTrial} from './paper-trial.mjs?v=72357af73c2689b52420';
-import {API_ORIGIN} from './deployment-config.mjs?v=72357af73c2689b52420';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=72357af73c2689b52420';
+import {createRadarReview} from './radar-review.mjs?v=601145ebbab4a1828dc8';
+import {createBangerRadar} from './banger-radar.mjs?v=601145ebbab4a1828dc8';
+import {createMyTokens} from './my-tokens.mjs?v=601145ebbab4a1828dc8';
+import {createOriginBuy} from './origin-buy.mjs?v=601145ebbab4a1828dc8';
+import {createPaperTrial} from './paper-trial.mjs?v=601145ebbab4a1828dc8';
+import {API_ORIGIN} from './deployment-config.mjs?v=601145ebbab4a1828dc8';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=601145ebbab4a1828dc8';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -877,7 +877,7 @@ function renderOverview() {
 const HOT_LANE_STATES = { primed: '관찰 중', armed: '발행 검토', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
 const HOT_QUALITY_LABELS = { candidate: '뱅어 후보', watch: '관찰', crowded: '중복 과밀', insufficient: '근거 부족' };
 const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문', D: 'D · 실측 반응 증가', S: 'S · 원문 우선 검토' };
-const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_SOURCE_FIRST_NOT_READY: '최근 공개 원문 또는 수집 시각 확인 필요', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
+const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '발행할 그림이 준비되지 않음', HOT_IMAGE_PENDING: '원문 소재로 실제 밈 그림 생성 중', FLASH_IMAGE_PENDING: '원문 소재로 실제 밈 그림 생성 중', FLASH_IMAGE_GENERATOR_UNAVAILABLE: '그림 생성 연결 확인 필요', FLASH_IMAGE_GENERATION_FAILED: '그림 생성 실패 · 원문 또는 그림 재준비 필요', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_SOURCE_FIRST_NOT_READY: '최근 공개 원문 또는 수집 시각 확인 필요', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
 const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
 Object.assign(HOT_HOLD_REASONS, {
   HOT_REVIEW_IMAGE_UNAVAILABLE: '원문 이미지 파일을 확인하지 못함',
@@ -1552,7 +1552,7 @@ function flashLaunchReady(lane, operator, paused) {
 function flashReasonText(code) {
   const availability = { FLASH_NOT_WARM: '발행 연결을 준비하지 못했습니다. 잠시 뒤 다시 미리보기 하세요.', FLASH_LAUNCH_SERVICE_UNAVAILABLE: '서버의 발행 연결이 설정되지 않았습니다.', FLASH_LANE_DISABLED: '플래시 발행이 비활성 상태입니다.', FLASH_LANE_MODE_WATCH: '관찰 모드에서는 발행할 수 없습니다.', FLASH_LANE_EMERGENCY_STOP: '긴급 정지 중입니다.', FLASH_LANE_POLICY_PAUSED: '자동화가 일시 중지되어 있습니다.', FLASH_LANE_PAUSED: '플래시 발행이 일시 중지되어 있습니다.', FLASH_HOUR_CAP: '이번 시간의 발행 한도에 도달했습니다.', FLASH_DAY_CAP: '오늘의 발행 한도에 도달했습니다.', FLASH_KEY_COOLDOWN: '같은 소재를 최근 발행했습니다. 대기 시간이 지난 뒤 다시 시도하세요.', FLASH_DUPLICATE_LAUNCH: '이미 발행한 소재입니다.' };
   if (availability[code]) return availability[code];
-  return ({ FLASH_NO_KEY: '원문에서 이름을 만들 수 없습니다. 주제가 드러나는 문장이나 이름을 입력하세요.', FLASH_IMAGE_UNAVAILABLE: '이미지를 준비하지 못했습니다. 이미지 주소를 입력하거나 다시 미리보기 하세요.', FLASH_ARTWORK_UNAVAILABLE: '자동 이미지 준비에 실패했습니다. 다시 미리보기 하세요.', FLASH_IMAGE_HOST_UNSTABLE: '그림 주소가 임시 주소라 발행을 보류했습니다.', FLASH_IMAGE_PUBLISH_FAILED: '그림 업로드에 실패했습니다. 다시 준비해 주세요.', FLASH_IMAGE_TIMEOUT: '그림 연결 확인이 지연됐습니다. 다시 준비해 주세요.', FLASH_IMAGE_RESPONSE_INVALID: '그림 주소에서 정상 이미지를 받지 못했습니다.', FLASH_IMAGE_HASH_MISMATCH: '업로드한 그림이 원본과 달라 발행을 보류했습니다.', FLASH_NOT_FUNDED: '발행 지갑의 자금이 부족합니다.', FLASH_PREVIEW_EXPIRED: '미리보기 유효 시간이 지났습니다. 다시 준비하세요.', FLASH_PREVIEW_CHANGED: '입력 또는 발행 모드가 바뀌었습니다. 다시 미리보기 하세요.' })[code] || String(code);
+  return ({ FLASH_NO_KEY: '원문에서 이름을 만들 수 없습니다. 주제가 드러나는 문장이나 이름을 입력하세요.', FLASH_IMAGE_UNAVAILABLE: '발행할 그림이 준비되지 않았습니다.', FLASH_IMAGE_PENDING: '원문 소재로 실제 밈 그림을 생성 중입니다. 준비 후 다시 미리보기 하세요.', FLASH_IMAGE_GENERATOR_UNAVAILABLE: '그림 생성 연결을 확인해 주세요.', FLASH_IMAGE_GENERATION_FAILED: '그림 생성에 실패했습니다. 원문 또는 그림을 다시 준비해 주세요.', FLASH_IMAGE_PUBLISH_REQUIRED: '생성한 그림을 게시할 저장소가 필요합니다.', FLASH_ARTWORK_UNAVAILABLE: '자동 이미지 준비에 실패했습니다. 다시 미리보기 하세요.', FLASH_IMAGE_HOST_UNSTABLE: '그림 주소가 임시 주소라 발행을 보류했습니다.', FLASH_IMAGE_PUBLISH_FAILED: '그림 업로드에 실패했습니다. 다시 준비해 주세요.', FLASH_IMAGE_TIMEOUT: '그림 연결 확인이 지연됐습니다. 다시 준비해 주세요.', FLASH_IMAGE_RESPONSE_INVALID: '그림 주소에서 정상 이미지를 받지 못했습니다.', FLASH_IMAGE_HASH_MISMATCH: '업로드한 그림이 원본과 달라 발행을 보류했습니다.', FLASH_NOT_FUNDED: '발행 지갑의 자금이 부족합니다.', FLASH_PREVIEW_EXPIRED: '미리보기 유효 시간이 지났습니다. 다시 준비하세요.', FLASH_PREVIEW_CHANGED: '입력 또는 발행 모드가 바뀌었습니다. 다시 미리보기 하세요.' })[code] || String(code);
 }
 function flashLaunchNote(lane, operator, paused) {
   if (!operator) return '운영자 권한이 필요합니다. 읽기 전용으로 표시합니다.';

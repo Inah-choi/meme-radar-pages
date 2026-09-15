@@ -1,4 +1,10 @@
 const ZERO = '0x0000000000000000000000000000000000000000';
+export function ownedTokenImageUrl(value) {
+  if (typeof value !== 'string') return null;
+  if (/^\/assets\/tokens\/[a-fA-F0-9-]+\.(png|svg)$/.test(value)) return value;
+  try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.port && ['pbs.twimg.com','raw.githubusercontent.com','ipfs.launchblitz.ai','gateway.pinata.cloud','ipfs.io'].includes(url.hostname) ? url.href : null; } catch { return null; }
+}
+
 const amount = value => typeof value === 'string' && /^\d+$/.test(value) ? BigInt(value) : null;
 const validDecimals = value => Number.isInteger(value) && value >= 0 && value <= 77;
 /** Raw base units -> decimal string in the asset's own decimals (18 for ETH, 6 for USDG, 8 for cbBTC). */
@@ -592,8 +598,9 @@ export function createMyTokens({api, document = globalThis.document, now = Date.
       const volume = token.volume || {}, fees = token.fees || {}, volumeUnit = unitOf(volume), feeUnit = unitOf(fees);
       const row = el('tr'); row.setAttribute('data-token', text(token.tokenAddress));
       const identity = el('div', 'my-token-identity');
-      if (/^\/assets\/tokens\/[a-fA-F0-9-]+\.(png|svg)$/.test(token.imageUrl || '')) {
-        const image = el('img', 'my-token-image'); image.src = assetUrl(token.imageUrl); image.alt = `${text(token.symbol)} 토큰 이미지`; image.loading = 'lazy'; image.width = 48; image.height = 48;
+      const artworkUrl = ownedTokenImageUrl(token.imageUrl);
+      if (artworkUrl) {
+        const image = el('img', 'my-token-image'); image.src = artworkUrl.startsWith('/') ? assetUrl(artworkUrl) : artworkUrl; image.alt = `${text(token.symbol)} 토큰 이미지`; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; image.width = 48; image.height = 48;
         image.addEventListener('error', () => { image.hidden = true; }); identity.append(image);
       }
       const title = add(el('div'), el('strong', 'my-token-symbol', text(token.symbol) || '티커 없음'), el('span', 'my-token-name muted', text(token.name)));
