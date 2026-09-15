@@ -26,4 +26,20 @@
 .origin-buy-action:disabled { opacity: .5; cursor: not-allowed; }
 .origin-buy-empty { margin: 8px 0 0; font-size: 12px; }
 .origin-buy-note { font-size: 11px; line-height: 1.7; }
+.origin-buy-holdings { margin-bottom: 20px; padding: 20px; }
+.origin-buy-position-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 14px; margin: 16px 0 24px; }
+.origin-buy-position { padding: 16px; border: 1px solid var(--line,#27333e); border-radius: 12px; min-width: 0; }
+.origin-buy-position-head, .origin-buy-position-footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.origin-buy-position-head h3 { margin: 0 0 5px; font-size: 17px; overflow-wrap: anywhere; }
+.origin-buy-position-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; margin: 18px 0; }
+.origin-buy-position-facts strong { display: block; margin-top: 5px; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.origin-buy-position-footer { align-items: center; margin-top: 14px; font-size: 11px; }
+.origin-buy-rules, .origin-buy-quote-status, .origin-buy-holdings-summary { line-height: 1.7; font-size: 11px; overflow-wrap: anywhere; }
+.origin-buy-provenance { display: block; margin-top: 5px; font-size: 11px; }
+.origin-buy-provenance.verified { color: #7fd1ff; }
+.origin-buy-provenance.unverified { color: var(--warning,#e8c377); }
+.origin-position-sell { min-height: 36px; white-space: normal; }
+.origin-position-sell:disabled { opacity: .5; cursor: not-allowed; }
+.origin-buy-exit-table { min-width: 720px; }
 @media (max-width: 900px) { .origin-buy-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .origin-buy-holdings { padding: 14px; } .origin-buy-position-facts { grid-template-columns: 1fr; } .origin-buy-position { padding: 12px; } .origin-buy-position-footer .origin-position-sell { width: 100%; } }
