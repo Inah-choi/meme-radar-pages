@@ -1,10 +1,10 @@
-import {createRadarReview} from './radar-review.mjs?v=bbf23fa95895885ee538';
-import {createBangerRadar} from './banger-radar.mjs?v=bbf23fa95895885ee538';
-import {createMyTokens} from './my-tokens.mjs?v=bbf23fa95895885ee538';
-import {createOriginBuy} from './origin-buy.mjs?v=bbf23fa95895885ee538';
-import {createPaperTrial} from './paper-trial.mjs?v=bbf23fa95895885ee538';
-import {API_ORIGIN} from './deployment-config.mjs?v=bbf23fa95895885ee538';
-import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=bbf23fa95895885ee538';
+import {createRadarReview} from './radar-review.mjs?v=37151f6d4c326911e22f';
+import {createBangerRadar} from './banger-radar.mjs?v=37151f6d4c326911e22f';
+import {createMyTokens} from './my-tokens.mjs?v=37151f6d4c326911e22f';
+import {createOriginBuy} from './origin-buy.mjs?v=37151f6d4c326911e22f';
+import {createPaperTrial} from './paper-trial.mjs?v=37151f6d4c326911e22f';
+import {API_ORIGIN} from './deployment-config.mjs?v=37151f6d4c326911e22f';
+import {normalizeApiOrigin, readApiSession, saveApiSession, forgetApiSession, apiRequestUrl, backendAssetUrl} from './api-connection.mjs?v=37151f6d4c326911e22f';
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [
   ...parent.querySelectorAll(selector),
@@ -876,8 +876,8 @@ function renderOverview() {
 /* 핫 레인: 교차 확인된 소재의 실시간 발행 레인. 핫 레인 페이지에서만 GET /api/hot-lane을 읽는다. */
 const HOT_LANE_STATES = { primed: '관찰 중', armed: '발행 검토', launching: '발행 중', launched: '발행됨', held: '보류', cooldown: '쿨다운' };
 const HOT_QUALITY_LABELS = { candidate: '뱅어 후보', watch: '관찰', crowded: '중복 과밀', insufficient: '근거 부족' };
-const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문', D: 'D · 실측 반응 증가' };
-const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
+const HOT_SIGNAL_LABELS = { A: 'A · 유사 토큰 발행', B: 'B · X 작성자 증가', C: 'C · 주요 계정 원문', D: 'D · 실측 반응 증가', S: 'S · 원문 우선 검토' };
+const HOT_HOLD_REASONS = { HOT_LANE_DISABLED: '핫 레인 자동 발행이 꺼져 있음', HOT_IMAGE_UNAVAILABLE: '사용할 원문 이미지가 없음', HOT_LANE_MODE_WATCH: '관측 모드에서는 발행하지 않음', HOT_LANE_PAUSED: '핫 레인 일시 중지', HOT_LANE_POLICY_PAUSED: '자동화 일시 중지', HOT_LANE_EMERGENCY_STOP: '긴급 정지 중', HOT_LANE_HOUR_CAP: '시간당 발행 한도 도달', HOT_LANE_DAY_CAP: '일별 발행 한도 도달', HOT_MARKET_SATURATED: '같은 이름·티커의 토큰이 이미 많음', HOT_SOURCE_EVIDENCE_REQUIRED: '최근 X 원문 근거가 부족함', HOT_CORROBORATION_REQUIRED: '서로 다른 확산 신호가 부족함', HOT_DUPLICATE_COVERAGE_UNKNOWN: '기존 토큰 중복을 확인할 수 없음', HOT_SOURCE_FIRST_NOT_READY: '최근 공개 원문 또는 수집 시각 확인 필요', HOT_ATTENTION_UNCONFIRMED: '원문의 실측 반응 증가·독립 확산 미확인', HOT_REVIEW_REQUIRED: 'AI 웃음 포인트·새로움 검토 대기', HOT_REVIEW_REJECTED: 'AI 소재 검토에서 제외', HOT_REVIEW_WATCH: 'AI 소재 검토 후 추가 관찰', HOT_PROPOSAL_DUPLICATE: '제안한 이름·티커가 기존 토큰과 겹침', HOT_PROPOSED_NAME_TAKEN: '제안한 이름이 최근 7일 발행 토큰과 겹침', HOT_PROPOSED_SYMBOL_TAKEN: '제안한 티커가 최근 7일 발행 토큰과 겹침' };
 const hotLaneOpenEvidence = new Set(), hotLaneEvidenceViews = new Map();
 Object.assign(HOT_HOLD_REASONS, {
   HOT_REVIEW_IMAGE_UNAVAILABLE: '원문 이미지 파일을 확인하지 못함',
@@ -931,6 +931,7 @@ function hotLaneMetric(value, unit = '') { return finite(value) && Number(value)
 function hotLaneAttention(quality) {
   const attention = quality.attention, section = append(node('section', 'hot-attention'), node('h4', '', '실제로 반응이 늘고 있나요?'));
   if (!attention) { section.append(node('p', 'muted', '실측 반응 확인 대기 · 조회수 한 번의 관측만으로는 증가 속도를 판단하지 않습니다.')); return section; }
+  if(attention.sourceAdmission?.mode==='source_first') section.append(node('p','hot-attention-verdict',attention.sourceAdmission.eligible?'원문 우선 · 반응 재수집을 기다리지 않고 밈 검토로 선정합니다.':'원문 우선 · 최근 원문과 수집 시각을 확인 중입니다.'));
   const measured = attention.eligible === true && attention.mode === 'measured_velocity', independent = attention.eligible === true && attention.mode === 'independent_spread';
   section.append(node('p', measured || independent ? 'hot-attention-verdict' : 'hot-gate-reasons', measured ? '실측 증가 확인' : independent ? '독립 원문 확산 확인' : '반응 증가 미확인'));
   const metrics = node('div', 'hot-attention-metrics');
@@ -938,15 +939,15 @@ function hotLaneAttention(quality) {
   section.append(metrics);
   const hasInterval = finite(attention.windowMinutes) && Number(attention.windowMinutes) > 0 && (finite(attention.viewsDelta) || finite(attention.engagementDelta));
   if (hasInterval) section.append(node('p', 'hot-attention-growth', `비교 간격 ${hotLaneMetric(attention.windowMinutes, '분')} · 조회 증가 ${finite(attention.viewsDelta) ? `+${hotLaneMetric(attention.viewsDelta, '회')}` : '미측정'} · 반응 증가 ${finite(attention.engagementDelta) ? `+${hotLaneMetric(attention.engagementDelta, '개')}` : '미측정'}`));
-  else section.append(node('p', 'muted', '증가량 미측정 · 비교 가능한 두 관측값이 없습니다. 단일 조회수만으로는 통과하지 않습니다.'));
+  else section.append(node('p', 'muted', attention.sourceAdmission?.mode === 'source_first' ? '증가량 미측정 · 원문 우선 모드에서는 밈 검토 결과로 선정합니다.' : '증가량 미측정 · 비교 가능한 두 관측값이 없습니다. 단일 조회수만으로는 통과하지 않습니다.'));
   if (independent) section.append(node('p', '', `서로 다른 작성자 ${hotLaneMetric(attention.authorCount, '명')}의 원문 반응을 확인했습니다. 계정의 진위까지 확인한 것은 아닙니다.`));
-  section.append(node('p', 'muted', `최대 6시간 이내 원문 · 20분 이내 실측 관측 기준${attention.latestObservedAt ? ` · 마지막 관측 ${date(attention.latestObservedAt)}` : ' · 유효 관측 시각 미확인'}`));
+  section.append(node('p', 'muted', `${attention.sourceAdmission?.mode === 'source_first' ? '1시간 이내 원문 · 20분 이내 수집 기준' : '최대 6시간 이내 원문 · 20분 이내 실측 관측 기준'}${attention.latestObservedAt ? ` · 마지막 관측 ${date(attention.latestObservedAt)}` : ' · 유효 관측 시각 미확인'}`));
   section.append(node('p', 'muted', '조회·좋아요·리포스트는 X에서 관측한 반응이며, 토큰 거래량이나 매수 수요를 뜻하지 않습니다.'));
   return section;
 }
 function hotLaneEditorial(quality) {
   const review = quality.editorial, section = append(node('section', 'hot-editorial'), node('h4', '', 'AI가 확인한 밈 소재'));
-  if (!review) { section.append(node('p', 'hot-gate-reasons', 'AI 소재 검토 대기')); section.append(node('p', 'muted', '실측 반응이 확인된 소재부터 웃음 포인트·새로움·이미지 구도를 검토합니다.')); return section; }
+  if (!review) { section.append(node('p', 'hot-gate-reasons', 'AI 소재 검토 대기')); section.append(node('p', 'muted', quality.attention?.sourceAdmission?.mode === 'source_first' ? '최근 원문의 웃음 포인트·새로움·이미지 구도를 검토합니다.' : '실측 반응이 확인된 소재부터 웃음 포인트·새로움·이미지 구도를 검토합니다.')); return section; }
   const labels = { pass: 'AI 소재 검토 통과', watch: 'AI 검토 · 추가 관찰', reject: 'AI 검토 · 제외' };
   section.append(node('p', review.verdict === 'pass' ? 'hot-editorial-verdict' : 'hot-gate-reasons', labels[review.verdict] || 'AI 소재 검토 상태 미확인'));
   if (review.topic?.label) section.append(node('p', 'hot-editorial-topic', String(review.topic.label).slice(0, 120)));
@@ -1014,7 +1015,7 @@ function hotLaneEvidence(signal, bucket) {
   const signals = append(node('section', 'hot-evidence-signals'), node('h4', '', '어떤 신호가 겹쳤나요?'));
   for (const kind of classes) {
     const description = !currentClasses.includes(kind) ? (Array.isArray(quality.currentClasses) ? '이전에 포착한 신호입니다. 현재 유효 신호에 포함하지 않습니다.' : '이전에 포착한 신호이며 현재 유효 여부는 미확인입니다.') : kind === 'A' ? `비슷한 소재의 토큰 ${display(signal.echoTokens, 0)}개가 ${display(signal.echoVenues, 0)}곳에서 발행됐습니다. 매수 수요를 뜻하지 않으며, 중복 경쟁일 수 있습니다.`
-      : kind === 'B' ? '서로 다른 작성자의 최근 X 원문이 증가했습니다.' : kind === 'C' ? '설정된 주요 계정의 최근 X 원문에서 포착했습니다.' : kind === 'D' ? '최대 6시간 이내 원문의 최근 실측 증가 또는 독립 작성자의 반응 확산을 확인했습니다. 토큰 거래량을 측정한 신호는 아닙니다.' : String(kind);
+      : kind === 'B' ? '서로 다른 작성자의 최근 X 원문이 증가했습니다.' : kind === 'C' ? '설정된 주요 계정의 최근 X 원문에서 포착했습니다.' : kind === 'S' ? '최근 공개 원문을 확인하고 밈 검토 결과로 선정했습니다.' : kind === 'D' ? '최대 6시간 이내 원문의 최근 실측 증가 또는 독립 작성자의 반응 확산을 확인했습니다. 토큰 거래량을 측정한 신호는 아닙니다.' : String(kind);
     signals.append(append(node('p'), node('strong', '', HOT_SIGNAL_LABELS[kind] || String(kind)), node('span', '', ` — ${description}`)));
   }
   if (!currentClasses.length) signals.append(node('p', 'muted', '현재 유효한 교차 신호가 확인되지 않았습니다.'));
@@ -1172,7 +1173,7 @@ function renderLiveReadiness() {
     : `${liveConfigured ? '실발행 설정 켜짐 · ' : ''}${result.status === 'blocked' ? '실전 점검: 미해결 항목 있음' : ready ? '실전 준비 점검 통과' : '실전 점검: 미검증 항목 있음'} · 점검 ${date(result.checkedAt)}`);
   summary.className = `lane-readiness${ready && !state.liveReadinessError ? '' : ' warning'}`;
   const settingsNode = $('#hot-live-settings');
-  settingsNode.textContent = result ? `실제 설정 · 핫레인 후보 처리 ${liveSettingLabel(settings.hotEnabled)} · 플래시 발행 ${liveSettingLabel(settings.flashEnabled)} · 핫레인→플래시 자동 연결 ${liveSettingLabel(settings.autoHot)} · 선택 경로 ${settings.route === 'flash' ? '플래시' : settings.route === 'direct' ? '직접 발행' : '미확인'}\n${display(settings.mode, '모드 미확인')} · 모의 실행 차단 ${liveSettingLabel(settings.effectiveDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)} · ${display(settings.network, '네트워크 미확인')}` : '현재 회차의 모의 설정과 실제 자동 발행 설정을 따로 확인합니다.';
+  settingsNode.textContent = result ? `실제 설정 · ${settings.selectionMode === 'source_first' ? '원문 우선 선정' : '반응 증가·확산 확인'} · 핫레인 후보 처리 ${liveSettingLabel(settings.hotEnabled)} · 플래시 발행 ${liveSettingLabel(settings.flashEnabled)} · 핫레인→플래시 자동 연결 ${liveSettingLabel(settings.autoHot)} · 선택 경로 ${settings.route === 'flash' ? '플래시' : settings.route === 'direct' ? '직접 발행' : '미확인'}\n${display(settings.mode, '모드 미확인')} · 모의 실행 차단 ${liveSettingLabel(settings.effectiveDryRun)} · 실제 발행 잠금 ${liveSettingLabel(settings.liveLocked)} · ${display(settings.network, '네트워크 미확인')}` : '현재 회차의 모의 설정과 실제 자동 발행 설정을 따로 확인합니다.';
   checks.replaceChildren(...list(result?.checks).map(check => append(node('li', `live-check ${['pass', 'blocked'].includes(check.status) ? check.status : 'unverified'}`),
     node('strong', '', `${({ pass: '통과', blocked: '차단', unverified: '미검증' })[check.status] || '미검증'} · ${display(check.label, '확인 항목')}`),
     node('span', 'muted', display(check.detail, '세부 정보 미확인')))));
@@ -1422,13 +1423,13 @@ function renderHotLane() {
   status.textContent = paused ? '일시 중지' : lane.enabled ? '활성' : '비활성';
   status.className = `pill${paused ? ' warning' : lane.enabled ? ' success' : ''}`;
   const hour = lane.caps?.hour || {}, day = lane.caps?.day || {};
-  const parts = [`${display(lane.mode, 'PAPER')} 모드`,
+  const parts = [`${display(lane.mode, 'PAPER')} 모드`,lane.selectionMode==='source_first'?'원문 우선 · 밈 검토 통과 후 자동 발행':'반응 증가·확산 확인 후 발행',
     hour.max === null ? `시간당 ${display(hour.used, 0)}건 (제한 없음)` : `시간당 ${display(hour.used, 0)} / ${display(hour.max, 0)}건`,
     day.max === null ? `오늘 ${display(day.used, 0)}건 (제한 없음)` : `오늘 ${display(day.used, 0)} / ${display(day.max, 0)}건`];
   if (paused) parts.push(`${date(lane.pausedUntil)}까지 일시 중지`);
   else if (lane.enabled && lane.mode !== 'AUTO') parts.push('AUTO 모드가 아니어서 실제 발행 없이 기록만 남깁니다');
   parts.push(lane.lastTickAt ? `마지막 점검 ${ago(lane.lastTickAt).replace('방금 관측', '방금')}` : '아직 점검 기록 없음');
-  if (lane.screening) parts.push(`${lane.screening.running ? 'AI 소재 검토 중' : 'AI 소재 검토'} · 최근 1시간 ${display(lane.screening.usedThisHour, '미확인')}/${display(lane.screening.maxPerHour, '미확인')}건`);
+  if (lane.screening) parts.push(`${lane.screening.running ? 'AI 소재 검토 중' : 'AI 소재 검토'} · 최근 1시간 ${display(lane.screening.usedThisHour, '미확인')}${lane.screening.maxPerHour===null?'':`/${display(lane.screening.maxPerHour, '미확인')}`}건`);
   $('#hot-lane-summary').textContent = parts.join(' · ');
   const readiness = $('#hot-lane-readiness'), policy = state.overview?.policy || {};
   const blockers = [];
